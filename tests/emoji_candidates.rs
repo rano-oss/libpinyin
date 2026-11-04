@@ -1,8 +1,8 @@
-//! Emoji dict lookup + optional engine merge (exact keyword on raw input).
+//! Emoji dict lookup + engine merge (exact keyword, or via phonetic candidates).
 
 mod common;
 
-use common::{data_dir, isolate_userdict};
+use common::{data_dir, isolate_userdict, lock_engine_tests};
 use libpinyin::EmojiDict;
 use std::path::PathBuf;
 
@@ -20,15 +20,15 @@ fn emoji_exact_english_keyword() {
 }
 
 #[test]
-fn emoji_exact_chinese_keyword_available_to_ui() {
-    // Chinese glosses stay in the dict for UIs that want them; core merge
-    // only uses the raw input keyword.
+fn emoji_exact_chinese_keyword() {
     let dict = EmojiDict::from_file(emoji_table()).expect("emoji.table");
     assert!(dict.lookup_best("猫").is_some());
+    assert!(dict.lookup_best("心").is_some());
 }
 
 #[test]
 fn engine_appends_emoji_for_exact_input_keyword() {
+    let _lock = lock_engine_tests();
     isolate_userdict("emoji-engine");
     let mut engine = libpinyin::Engine::from_data_dir(data_dir()).expect("load");
     engine.set_emoji_enabled(true);
@@ -55,5 +55,34 @@ fn engine_appends_emoji_for_exact_input_keyword() {
         idx,
         idx / page_size,
         &texts[..texts.len().min(page_size)]
+    );
+}
+
+#[test]
+fn engine_bridges_pinyin_to_chinese_emoji_keyword() {
+    // xin → top phonetic includes 心 → emoji.table keyword 心.
+    let _lock = lock_engine_tests();
+    isolate_userdict("emoji-xin");
+    let mut engine = libpinyin::Engine::from_data_dir(data_dir()).expect("load");
+    engine.set_emoji_enabled(true);
+    let want = EmojiDict::from_file(emoji_table())
+        .unwrap()
+        .lookup_best("心")
+        .unwrap()
+        .emoji
+        .clone();
+    let cands = engine.input("xin");
+    let texts: Vec<_> = cands.iter().map(|c| c.text.as_str()).collect();
+    assert!(
+        texts.iter().any(|t| *t == want.as_str()),
+        "expected {} (via 心) for xin, got {:?}",
+        want,
+        &texts[..texts.len().min(12)]
+    );
+    let idx = texts.iter().position(|t| *t == want.as_str()).unwrap();
+    assert!(
+        idx < 9,
+        "emoji buried at {idx}; first page: {:?}",
+        &texts[..texts.len().min(9)]
     );
 }

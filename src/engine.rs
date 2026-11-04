@@ -267,8 +267,15 @@ impl Engine {
         }
         if want_emoji {
             if let Some(ref emoji_dict) = self.emoji_dict {
-                // Exact keyword on the raw buffer only.
-                if let Some(entry) = emoji_dict.lookup_best(input) {
+                // Exact ASCII/Chinese keyword on the raw buffer, else bridge via
+                // top phonetic candidates (e.g. xin → 心 → 💌).
+                let entry = emoji_dict.lookup_best(input).or_else(|| {
+                    vec.iter()
+                        .take(8)
+                        .filter_map(|c| emoji_dict.lookup_best(&c.text))
+                        .max_by_key(|e| e.frequency)
+                });
+                if let Some(entry) = entry {
                     if !vec.iter().any(|c| c.text == entry.emoji)
                         && !extras.iter().any(|c| c.text == entry.emoji)
                     {

@@ -6,9 +6,8 @@ Rust Pinyin input method engine: segmentation, candidates, double pinyin, mixed 
 
 ```toml
 # Cargo.toml
-libpinyin = { git = "https://github.com/rano-oss/libpinyin" }
-# or, locally:
-# libpinyin = { path = "../libpinyin" }
+libpinyin = "0.1"
+# or: git = "https://github.com/rano-oss/libpinyin"
 ```
 
 Runtime lexicon files are **not** shipped in the crate. Point `Engine::from_data_dir` at a directory with `lexicon.fst` / `lexicon.dat` / word-bigram artifacts (and optionally `emoji.table`, `english.wordlist`). pinyinwl installs these under `/usr/share/libpinyin/data/`.

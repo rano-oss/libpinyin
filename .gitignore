@@ -1,0 +1,7 @@
+/target
+**/target/
+**/*.redb
+*.fst
+lcov.info
+.cargo/
+Cargo.lock

@@ -1,0 +1,33 @@
+[package]
+name = "libpinyin"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.73"
+description = "Pinyin Chinese input method engine with fuzzy matching, double pinyin, and user learning"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+repository = "https://github.com/rano-oss/libpinyin"
+homepage = "https://github.com/rano-oss/libpinyin"
+keywords = ["pinyin", "chinese", "ime", "input-method"]
+categories = ["internationalization", "text-processing"]
+exclude = [
+    "**/*.fst",
+    "**/*.redb",
+    "/target/",
+    "lcov.info",
+]
+
+[lib]
+name = "libpinyin"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+redb = "2.1"
+fst = "0.4"
+lru = "0.16"
+memmap2 = "0.9"
+log = "0.4"
+
+[dev-dependencies]
+libloading = "0.8"

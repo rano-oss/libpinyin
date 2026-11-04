@@ -1,27 +1,6 @@
 //! Fuzzy matching for phonetic similarity (pinyin/zhuyin).
 use std::collections::HashMap;
 
-/// A single fuzzy rule with penalty.
-#[derive(Debug, Clone)]
-pub struct FuzzyRule {
-    /// The canonical (correct) form
-    pub from: String,
-    /// The alternative (fuzzy) form
-    pub to: String,
-    /// Penalty for using this fuzzy match (higher = more penalty)
-    pub penalty: f32,
-}
-
-impl FuzzyRule {
-    pub fn new(from: &str, to: &str, penalty: f32) -> Self {
-        Self {
-            from: from.to_string(),
-            to: to.to_string(),
-            penalty,
-        }
-    }
-}
-
 /// Represents fuzzy alternatives for phonetic units (syllables).
 ///
 /// For each canonical syllable (lowercased), stores a vector of alternative

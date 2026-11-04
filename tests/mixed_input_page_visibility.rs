@@ -4,7 +4,7 @@
 
 mod common;
 
-use libpinyin::{ImeEngine, KeyEvent};
+use libpinyin::{Editor, KeyEvent};
 use std::path::PathBuf;
 
 fn data_dir() -> PathBuf {
@@ -20,23 +20,23 @@ fn data_dir() -> PathBuf {
     panic!("no pinyin data dir found");
 }
 
-fn type_ascii(ime: &mut ImeEngine<libpinyin::parser::Parser>, s: &str) {
+fn type_ascii(ime: &mut Editor, s: &str) {
     for ch in s.chars() {
         let _ = ime.process_key(KeyEvent::Char(ch));
     }
 }
 
 #[test]
-fn english_and_emoji_on_first_page_via_ime_engine() {
+fn english_and_emoji_on_first_page_via_editor() {
     common::isolate_userdict("mixed-input");
     let mut engine = libpinyin::Engine::from_data_dir(data_dir()).expect("load");
     engine.set_english_enabled(true);
     engine.set_emoji_enabled(true);
     let page_size = 9;
 
-    let mut ime = ImeEngine::with_page_size(engine.into_inner(), page_size);
+    let mut ime = Editor::with_page_size(engine, page_size);
     type_ascii(&mut ime, "hello");
-    let page = &ime.context().candidates;
+    let page = &ime.context.candidates;
     assert!(
         page.iter().any(|t| t.eq_ignore_ascii_case("hello")),
         "expected 'hello' on first page, got {:?}",
@@ -46,7 +46,7 @@ fn english_and_emoji_on_first_page_via_ime_engine() {
     // Fresh composition for emoji keyword (same backend / userdict).
     ime.reset();
     type_ascii(&mut ime, "smile");
-    let page = &ime.context().candidates;
+    let page = &ime.context.candidates;
     let want = libpinyin::EmojiDict::from_file(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/emoji.table"),
     )

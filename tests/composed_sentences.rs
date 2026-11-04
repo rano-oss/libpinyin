@@ -86,7 +86,7 @@ fn composed_sentences_and_rank_options() {
         "PhraseLengthThenScore missing unigrams in top-8: {phrase_tops:?}"
     );
     assert_eq!(
-        engine.candidate_rank_mode(),
+        engine.model.config.candidate_rank_mode,
         CandidateRankMode::PhraseLengthThenScore
     );
 
@@ -111,9 +111,9 @@ fn composed_sentences_and_rank_options() {
     // UX knobs: sentences in the bar + span ranking.
     engine.set_emit_composed_sentences(true);
     engine.set_candidate_rank_mode(CandidateRankMode::MatchedSpanThenScore);
-    assert!(engine.emit_composed_sentences());
+    assert!(engine.model.config.emit_composed_sentences);
     assert_eq!(
-        engine.candidate_rank_mode(),
+        engine.model.config.candidate_rank_mode,
         CandidateRankMode::MatchedSpanThenScore
     );
     let ux_top = engine

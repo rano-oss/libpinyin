@@ -3,7 +3,7 @@
 //! Wordlist format is compatible with common libpinyin distributions
 //! (`word\tfreq`). This module only does lookup and local ranking among
 //! English hits — how they appear relative to hanzi/emoji is up to the
-//! engine merge policy or the UI.
+//! backend merge policy or the UI.
 
 use std::path::Path;
 

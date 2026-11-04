@@ -1,14 +1,20 @@
-//! IME engine with session management and key event processing.
+//! Key-event session editor (preedit, candidates, commit).
 //!
-//! The `ImeEngine` wraps the backend `Engine` with session state management,
-//! providing a `process_key()` method that handles key events and maintains
-//! IME state across multiple interactions. It uses a pluggable editor
-//! architecture to support different input modes (phonetic, punctuation, suggestion).
+//! [`Editor`] wraps [`crate::Engine`] with session state and mode handlers
+//! (phonetic, punctuation, suggestion), similar to chewing's `Editor`.
 
-use super::context::{ImeContext, InputPurpose};
-use super::editor::{EditorResult, PhoneticEditor, PunctuationEditor, SuggestionEditor};
-use super::session::{ImeSession, InputMode};
-use crate::core::engine::{Engine, SyllableParser};
+mod modes;
+mod options;
+
+pub use modes::preferred_chinese_punct;
+pub use options::EditorOptions;
+
+use crate::context::{ImeContext, InputPurpose};
+use crate::engine::Engine;
+use crate::model::utils;
+use crate::session::{ImeSession, InputMode};
+use modes::{EditorResult, PhoneticEditor, PunctuationEditor, SuggestionEditor};
+use std::collections::HashMap;
 
 /// Key event types that the IME can process.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,14 +73,14 @@ pub enum KeyResult {
     NotHandled,
 }
 
-/// IME engine with session management.
+/// Key-event session editor.
 ///
-/// This struct combines the backend Engine with a session that tracks
-/// input state across multiple key events. It uses pluggable editors
-/// for different input modes (phonetic, punctuation, suggestion).
-pub struct ImeEngine<P: SyllableParser> {
-    /// Backend linguistic engine
-    backend: Engine<P>,
+/// Combines [`Engine`] with session state across key events (preedit,
+/// candidates, commit), with mode handlers for phonetic / punctuation /
+/// suggestion — analogous to chewing's `Editor`.
+pub struct Editor {
+    /// Linguistic conversion engine
+    pub engine: Engine,
 
     /// Phonetic input editor
     phonetic_editor: PhoneticEditor,
@@ -86,10 +92,10 @@ pub struct ImeEngine<P: SyllableParser> {
     suggestion_editor: SuggestionEditor,
 
     /// Session state
-    session: ImeSession,
+    pub session: ImeSession,
 
     /// Context for platform communication
-    context: ImeContext,
+    pub context: ImeContext,
 
     /// Durable English / Latin passthrough mode (ibus-libpinyin `modeChinese == false`).
     /// Survives composition `reset()` so Shift 中/英 stays sticky across focus clears.
@@ -102,14 +108,14 @@ pub struct ImeEngine<P: SyllableParser> {
     tone_filter: Option<u8>,
 
     /// Character → tone map for Tab filter.
-    tone_map: crate::core::ToneMap,
+    tone_map: ToneMap,
 }
 
-impl<P: SyllableParser> ImeEngine<P> {
-    /// Create a new IME engine with the given backend.
-    pub fn new(backend: Engine<P>) -> Self {
+impl Editor {
+    /// Create a new IME engine with the given engine.
+    pub fn new(engine: Engine) -> Self {
         Self {
-            backend,
+            engine,
             phonetic_editor: PhoneticEditor::default(),
             punct_editor: PunctuationEditor::default(),
             suggestion_editor: SuggestionEditor::default(),
@@ -118,40 +124,15 @@ impl<P: SyllableParser> ImeEngine<P> {
             passthrough: false,
             last_commit: String::new(),
             tone_filter: None,
-            tone_map: crate::core::ToneMap::default(),
+            tone_map: ToneMap::default(),
         }
     }
 
     /// Create an IME engine with specified candidate page size.
-    pub fn with_page_size(backend: Engine<P>, page_size: usize) -> Self {
-        let mut engine = Self::new(backend);
-        engine.session = ImeSession::with_page_size(page_size);
-        engine
-    }
-
-    /// Access the linguistic backend.
-    pub fn backend(&self) -> &Engine<P> {
-        &self.backend
-    }
-
-    /// Mutable access to the linguistic backend.
-    pub fn backend_mut(&mut self) -> &mut Engine<P> {
-        &mut self.backend
-    }
-
-    /// Get a reference to the context for reading IME state.
-    pub fn context(&self) -> &ImeContext {
-        &self.context
-    }
-
-    /// Get a mutable reference to the context.
-    pub fn context_mut(&mut self) -> &mut ImeContext {
-        &mut self.context
-    }
-
-    /// Get a reference to the session.
-    pub fn session(&self) -> &ImeSession {
-        &self.session
+    pub fn with_page_size(engine: Engine, page_size: usize) -> Self {
+        let mut ime = Self::new(engine);
+        ime.session = ImeSession::with_page_size(page_size);
+        ime
     }
 
     /// Reset composition state. Passthrough (English) mode is preserved.
@@ -164,7 +145,7 @@ impl<P: SyllableParser> ImeEngine<P> {
         // Note: Don't reset suggestion_editor as it may be about to activate
         // Note: passthrough survives — like ibus-libpinyin modeChinese across reset
         if self.passthrough {
-            self.session.set_mode(InputMode::Passthrough);
+            self.session.mode = InputMode::Passthrough;
             self.context.auxiliary_text = "英".to_string();
         }
     }
@@ -183,7 +164,7 @@ impl<P: SyllableParser> ImeEngine<P> {
         self.phonetic_editor.reset();
         self.punct_editor.reset();
         if enabled {
-            self.session.set_mode(InputMode::Passthrough);
+            self.session.mode = InputMode::Passthrough;
             self.context.auxiliary_text = "英".to_string();
         }
     }
@@ -191,7 +172,7 @@ impl<P: SyllableParser> ImeEngine<P> {
     pub fn set_input_purpose(&mut self, purpose: InputPurpose) {
         let prev = self.context.input_purpose;
         self.context.input_purpose = purpose;
-        self.backend.set_input_purpose(purpose);
+        self.engine.set_input_purpose(purpose);
         if purpose.is_private() && prev != purpose {
             self.session.clear();
             self.context.clear();
@@ -200,10 +181,6 @@ impl<P: SyllableParser> ImeEngine<P> {
             self.punct_editor.reset();
             self.tone_filter = None;
         }
-    }
-
-    pub fn input_purpose(&self) -> InputPurpose {
-        self.context.input_purpose
     }
 
     /// Maybe enter suggestion mode automatically after a commit.
@@ -220,8 +197,8 @@ impl<P: SyllableParser> ImeEngine<P> {
             return;
         }
 
-        let auto_suggestion = self.backend.config().auto_suggestion;
-        let min_len = self.backend.config().min_suggestion_trigger_length;
+        let auto_suggestion = self.engine.model.config.auto_suggestion;
+        let min_len = self.engine.model.config.min_suggestion_trigger_length;
         if !auto_suggestion {
             return;
         }
@@ -231,10 +208,10 @@ impl<P: SyllableParser> ImeEngine<P> {
         }
 
         // Activate suggestion mode
-        self.session.activate();
-        self.session.set_mode(InputMode::Suggestion);
+        self.session.active = true;
+        self.session.mode = InputMode::Suggestion;
         self.suggestion_editor
-            .activate(committed_text, &mut self.session, &mut self.backend);
+            .activate(committed_text, &mut self.session, &mut self.engine);
         self.session.sync_to_context(&mut self.context);
         self.update_auxiliary_text();
     }
@@ -264,13 +241,13 @@ impl<P: SyllableParser> ImeEngine<P> {
         // Exception: in Windows-style v-mode, digit keys extend the numeral buffer
         // (v123 → 一二三); select with Space/Enter instead.
         let key = if let KeyEvent::Char(ch) = key {
-            let v_mode = self.backend.config().v_mode_enabled;
+            let v_mode = self.engine.model.config.v_mode_enabled;
             let v_digit_entry = v_mode
                 && ch.is_ascii_digit()
-                && self.session.mode() == InputMode::Phonetic
-                && self.session.input_buffer().text().starts_with('v');
+                && self.session.mode == InputMode::Phonetic
+                && self.session.input_buffer.text().starts_with('v');
             if !v_digit_entry {
-                if let Some(index) = self.backend.config().selection_key_index(ch) {
+                if let Some(index) = self.engine.model.config.selection_key_index(ch) {
                     // Convert to 1-based number (index 0 → number 1, etc.)
                     KeyEvent::Number((index + 1) as u8)
                 } else {
@@ -296,12 +273,12 @@ impl<P: SyllableParser> ImeEngine<P> {
                     return KeyResult::NotHandled;
                 }
 
-                let was_phonetic = self.session.mode() == InputMode::Phonetic;
+                let was_phonetic = self.session.mode == InputMode::Phonetic;
 
                 if was_phonetic {
                     // Commit current preedit if any
-                    if !self.session.input_buffer().is_empty() {
-                        let text = self.session.input_buffer().text().to_string();
+                    if !self.session.input_buffer.is_empty() {
+                        let text = self.session.input_buffer.text().to_string();
                         self.context.commit_text = text;
                     }
                     self.reset();
@@ -310,11 +287,11 @@ impl<P: SyllableParser> ImeEngine<P> {
                 }
 
                 // Toggle: if in punctuation, go to init; else go to punctuation
-                if self.session.mode() == InputMode::Punctuation {
+                if self.session.mode == InputMode::Punctuation {
                     self.reset();
                 } else {
-                    self.session.set_mode(InputMode::Punctuation);
-                    self.session.activate();
+                    self.session.mode = InputMode::Punctuation;
+                    self.session.active = true;
                 }
 
                 self.session.sync_to_context(&mut self.context);
@@ -330,7 +307,7 @@ impl<P: SyllableParser> ImeEngine<P> {
         }
 
         // Route to appropriate editor based on current mode
-        let result = match self.session.mode() {
+        let result = match self.session.mode {
             InputMode::Init => {
                 let is_phonetic_input = matches!(key, KeyEvent::Char(ch) if
                     ch.is_ascii_lowercase()
@@ -339,27 +316,27 @@ impl<P: SyllableParser> ImeEngine<P> {
                 );
 
                 if is_phonetic_input {
-                    self.session.activate();
-                    self.session.set_mode(InputMode::Phonetic);
+                    self.session.active = true;
+                    self.session.mode = InputMode::Phonetic;
                     self.phonetic_editor.set_predict_context(&self.last_commit);
                     self.phonetic_editor
-                        .process_key(key, &mut self.session, &mut self.backend)
+                        .process_key(key, &mut self.session, &mut self.engine)
                 } else if let KeyEvent::Char(ch) = key {
-                    let want_cn = self.backend.config().chinese_punctuation;
+                    let want_cn = self.engine.model.config.chinese_punctuation;
                     if want_cn {
-                        if let Some(p) = crate::core::preferred_chinese_punct(ch) {
+                        if let Some(p) = preferred_chinese_punct(ch) {
                             EditorResult::CommitAndReset(p.to_string())
                         } else if self.punct_editor.has_alternatives(ch) {
-                            self.session.activate();
-                            self.session.set_mode(InputMode::Punctuation);
+                            self.session.active = true;
+                            self.session.mode = InputMode::Punctuation;
                             self.punct_editor.activate(ch, &mut self.session);
                             EditorResult::Handled
                         } else {
                             EditorResult::PassThrough
                         }
                     } else if self.punct_editor.has_alternatives(ch) {
-                        self.session.activate();
-                        self.session.set_mode(InputMode::Punctuation);
+                        self.session.active = true;
+                        self.session.mode = InputMode::Punctuation;
                         self.punct_editor.activate(ch, &mut self.session);
                         EditorResult::Handled
                     } else {
@@ -377,14 +354,14 @@ impl<P: SyllableParser> ImeEngine<P> {
                         self.phonetic_editor.set_predict_context(&self.last_commit);
                         // Re-query so filter applies on fresh list
                         self.phonetic_editor
-                            .update_candidates(&mut self.session, &mut self.backend);
+                            .update_candidates(&mut self.session, &mut self.engine);
                         self.apply_tone_filter_to_session();
                         EditorResult::Handled
                     }
                     KeyEvent::PinPhrase => self.handle_pin_phrase(),
                     KeyEvent::Char(ch)
-                        if self.backend.config().chinese_punctuation
-                            && crate::core::preferred_chinese_punct(*ch).is_some() =>
+                        if self.engine.model.config.chinese_punctuation
+                            && preferred_chinese_punct(*ch).is_some() =>
                     {
                         self.commit_default_then_punct(*ch)
                     }
@@ -393,7 +370,7 @@ impl<P: SyllableParser> ImeEngine<P> {
                         let result = self.phonetic_editor.process_key(
                             key,
                             &mut self.session,
-                            &mut self.backend,
+                            &mut self.engine,
                         );
                         self.apply_tone_filter_to_session();
                         result
@@ -405,20 +382,20 @@ impl<P: SyllableParser> ImeEngine<P> {
                 let result = self.suggestion_editor.process_key(
                     key.clone(),
                     &mut self.session,
-                    &mut self.backend,
+                    &mut self.engine,
                 );
                 // If suggestion editor switches to phonetic mode, re-process the key
                 match &result {
                     EditorResult::ModeSwitch(mode) => {
                         let mode = *mode;
                         self.suggestion_editor.reset();
-                        self.session.set_mode(mode);
-                        self.session.candidates_mut().clear();
+                        self.session.mode = mode;
+                        self.session.candidates.clear();
                         if mode == InputMode::Phonetic {
                             self.phonetic_editor.process_key(
                                 key,
                                 &mut self.session,
-                                &mut self.backend,
+                                &mut self.engine,
                             )
                         } else {
                             result
@@ -433,12 +410,12 @@ impl<P: SyllableParser> ImeEngine<P> {
                         if is_phonetic {
                             // Reset and re-process as Init → Phonetic
                             self.reset();
-                            self.session.activate();
-                            self.session.set_mode(InputMode::Phonetic);
+                            self.session.active = true;
+                            self.session.mode = InputMode::Phonetic;
                             self.phonetic_editor.process_key(
                                 key,
                                 &mut self.session,
-                                &mut self.backend,
+                                &mut self.engine,
                             )
                         } else {
                             result
@@ -468,8 +445,8 @@ impl<P: SyllableParser> ImeEngine<P> {
             }
             EditorResult::Commit(text) => {
                 // Apply full-width conversion if enabled
-                let text = if self.backend.config().is_fullwidth() {
-                    crate::core::utils::to_fullwidth(&text)
+                let text = if self.engine.model.config.full_width_enabled {
+                    utils::to_fullwidth(&text)
                 } else {
                     text
                 };
@@ -489,8 +466,8 @@ impl<P: SyllableParser> ImeEngine<P> {
             }
             EditorResult::CommitAndReset(text) => {
                 // Apply full-width conversion if enabled
-                let text = if self.backend.config().is_fullwidth() {
-                    crate::core::utils::to_fullwidth(&text)
+                let text = if self.engine.model.config.full_width_enabled {
+                    utils::to_fullwidth(&text)
                 } else {
                     text
                 };
@@ -511,8 +488,8 @@ impl<P: SyllableParser> ImeEngine<P> {
             }
             EditorResult::CommitPartial(text, bytes_consumed) => {
                 // Apply full-width conversion if enabled
-                let text = if self.backend.config().is_fullwidth() {
-                    crate::core::utils::to_fullwidth(&text)
+                let text = if self.engine.model.config.full_width_enabled {
+                    utils::to_fullwidth(&text)
                 } else {
                     text
                 };
@@ -524,10 +501,10 @@ impl<P: SyllableParser> ImeEngine<P> {
                 }
 
                 // Remove consumed bytes from input buffer and regenerate candidates
-                self.session.input_buffer_mut().remove_front(bytes_consumed);
+                self.session.input_buffer.remove_front(bytes_consumed);
                 self.phonetic_editor.set_predict_context(&self.last_commit);
                 self.phonetic_editor
-                    .update_candidates(&mut self.session, &mut self.backend);
+                    .update_candidates(&mut self.session, &mut self.engine);
                 self.apply_tone_filter_to_session();
                 self.session.sync_to_context(&mut self.context);
                 self.update_auxiliary_text();
@@ -536,7 +513,7 @@ impl<P: SyllableParser> ImeEngine<P> {
             }
             EditorResult::ModeSwitch(mode) => {
                 // Switch to new mode
-                self.session.set_mode(mode);
+                self.session.mode = mode;
                 self.session.sync_to_context(&mut self.context);
                 self.update_auxiliary_text();
                 KeyResult::Handled
@@ -552,12 +529,12 @@ impl<P: SyllableParser> ImeEngine<P> {
             self.context.auxiliary_text.clear();
             return;
         }
-        if !self.session.is_active() {
+        if !self.session.active {
             self.context.auxiliary_text.clear();
             return;
         }
 
-        let aux_text = match self.session.mode() {
+        let aux_text = match self.session.mode {
             InputMode::Init => String::new(),
             InputMode::Phonetic => match self.tone_filter {
                 Some(t) => format!("{t}声"),
@@ -592,7 +569,7 @@ impl<P: SyllableParser> ImeEngine<P> {
         };
         let map = &self.tone_map;
         let mut kept = Vec::new();
-        for c in self.session.candidates().candidates() {
+        for c in self.session.candidates.candidates() {
             match map.first_han_tone(&c.text) {
                 Some(t) if t == tone => kept.push(c.clone()),
                 None => kept.push(c.clone()), // unknown tone: keep
@@ -600,12 +577,12 @@ impl<P: SyllableParser> ImeEngine<P> {
             }
         }
         if !kept.is_empty() {
-            self.session.candidates_mut().set_candidates(kept);
+            self.session.candidates.set_candidates(kept);
         }
     }
 
     fn handle_pin_phrase(&mut self) -> EditorResult {
-        let Some(candidate) = self.session.candidates().selected_candidate() else {
+        let Some(candidate) = self.session.candidates.selected_candidate() else {
             return EditorResult::PassThrough;
         };
         let phrase = candidate.text.clone();
@@ -613,100 +590,182 @@ impl<P: SyllableParser> ImeEngine<P> {
             return EditorResult::PassThrough;
         }
         // High boost so the phrase ranks first next time.
-        let _ = self.backend.userdict_mut().add_phrase(&phrase, 500);
-        self.backend.clear_cache();
+        let _ = self.engine.model.userdict.add_phrase(&phrase, 500);
+        self.engine.clear_cache();
         self.phonetic_editor.set_predict_context(&self.last_commit);
         self.phonetic_editor
-            .update_candidates(&mut self.session, &mut self.backend);
+            .update_candidates(&mut self.session, &mut self.engine);
         self.apply_tone_filter_to_session();
         EditorResult::Handled
     }
 
     fn commit_default_then_punct(&mut self, punct_key: char) -> EditorResult {
-        let Some(punct) = crate::core::preferred_chinese_punct(punct_key) else {
+        let Some(punct) = preferred_chinese_punct(punct_key) else {
             return EditorResult::PassThrough;
         };
         let mut out = String::new();
-        if let Some(candidate) = self.session.candidates().selected_candidate() {
+        if let Some(candidate) = self.session.candidates.selected_candidate() {
             let text = candidate.text.clone();
-            self.backend.commit(&text);
+            self.engine.commit(&text);
             out.push_str(&text);
-        } else if !self.session.input_buffer().is_empty() {
+        } else if !self.session.input_buffer.is_empty() {
             // No candidates: commit raw buffer then punct (rare).
-            out.push_str(self.session.input_buffer().text());
+            out.push_str(self.session.input_buffer.text());
         }
         out.push_str(punct);
         EditorResult::CommitAndReset(out)
     }
+}
 
-    // ========== Configuration Management API ==========
+// ========== Mandarin tone lookup (Mac-style Tab tone filter) ==========
 
-    /// Toggle full-width mode on/off.
-    pub fn toggle_fullwidth(&mut self) {
-        self.backend.config_mut().toggle_fullwidth();
-    }
+/// Maps Han characters to primary Mandarin tone (1–4). Neutral/unknown omitted.
+#[derive(Debug, Clone)]
+pub struct ToneMap {
+    tones: HashMap<char, u8>,
+}
 
-    /// Set full-width mode explicitly.
-    pub fn set_fullwidth(&mut self, enabled: bool) {
-        self.backend.config_mut().set_fullwidth(enabled);
-    }
-
-    /// Check if full-width mode is enabled.
-    pub fn is_fullwidth(&self) -> bool {
-        self.backend.config().is_fullwidth()
-    }
-
-    /// Set the selection keys string (e.g., "asdfghjkl" or "123456789").
-    pub fn set_select_keys(&mut self, keys: &str) {
-        self.backend.config_mut().set_select_keys(keys);
-    }
-
-    /// Set the number of candidates displayed per page.
-    pub fn set_page_size(&mut self, page_size: usize) {
-        self.session.candidates_mut().set_page_size(page_size);
-    }
-
-    /// Get the current selection keys.
-    pub fn get_select_keys(&self) -> String {
-        self.backend.config().get_select_keys().to_string()
-    }
-
-    /// Add a phrase to the mask list (hide from suggestions).
-    /// Persists via userdict and session config.
-    pub fn mask_phrase(&mut self, phrase: &str) {
-        self.backend.mask_phrase(phrase);
-    }
-
-    /// Remove a phrase from the mask list (allow in suggestions).
-    /// Clears persisted userdict mask and session config.
-    pub fn unmask_phrase(&mut self, phrase: &str) -> bool {
-        let was = self.backend.is_phrase_hidden(phrase);
-        self.backend.unmask_phrase(phrase);
-        was
-    }
-
-    /// Check if a phrase is masked (session or persisted).
-    pub fn is_masked(&self, phrase: &str) -> bool {
-        self.backend.is_phrase_hidden(phrase)
-    }
-
-    /// Get all masked phrases (session ∪ persisted).
-    pub fn get_masked_phrases(&self) -> Vec<String> {
-        let mut set: std::collections::HashSet<String> = self
-            .backend
-            .config()
-            .get_masked_phrases()
-            .into_iter()
-            .collect();
-        for p in self.backend.userdict().list_masked() {
-            set.insert(p);
+impl Default for ToneMap {
+    fn default() -> Self {
+        Self {
+            tones: builtin_tones(),
         }
-        let mut phrases: Vec<_> = set.into_iter().collect();
-        phrases.sort();
-        phrases
+    }
+}
+
+impl ToneMap {
+    pub fn tone_of(&self, ch: char) -> Option<u8> {
+        self.tones.get(&ch).copied()
     }
 
-    pub fn clear_masked_phrases(&mut self) {
-        self.backend.clear_masked_phrases();
+    /// Tone of the first Han character in `text`, if known.
+    pub fn first_han_tone(&self, text: &str) -> Option<u8> {
+        text.chars()
+            .find(|c| {
+                let u = *c as u32;
+                (0x4E00..=0x9FFF).contains(&u) || (0x3400..=0x4DBF).contains(&u)
+            })
+            .and_then(|c| self.tone_of(c))
     }
+}
+
+fn builtin_tones() -> HashMap<char, u8> {
+    // Compact seed covering common singles used in filtering demos / tests.
+    // Unknown chars are kept when filtering (see Editor).
+    let pairs: &[(char, u8)] = &[
+        // ma
+        ('妈', 1),
+        ('麻', 2),
+        ('马', 3),
+        ('骂', 4),
+        ('吗', 1),
+        // yi
+        ('一', 1),
+        ('移', 2),
+        ('以', 3),
+        ('意', 4),
+        ('亿', 4),
+        // shi
+        ('师', 1),
+        ('时', 2),
+        ('使', 3),
+        ('是', 4),
+        ('事', 4),
+        ('市', 4),
+        // bei / jing
+        ('杯', 1),
+        ('北', 3),
+        ('被', 4),
+        ('备', 4),
+        ('京', 1),
+        ('经', 1),
+        ('精', 1),
+        ('景', 3),
+        ('静', 4),
+        // ni / hao
+        ('妮', 1),
+        ('泥', 2),
+        ('你', 3),
+        ('逆', 4),
+        ('蒿', 1),
+        ('毫', 2),
+        ('好', 3),
+        ('号', 4),
+        // zhong / guo
+        ('中', 1),
+        ('忠', 1),
+        ('种', 3),
+        ('重', 4),
+        ('众', 4),
+        ('锅', 1),
+        ('国', 2),
+        ('果', 3),
+        ('过', 4),
+        // wo / men
+        ('窝', 1),
+        ('我', 3),
+        ('卧', 4),
+        ('闷', 1),
+        ('门', 2),
+        ('们', 2),
+        ('焖', 4),
+        // ai / ren
+        ('埃', 1),
+        ('癌', 2),
+        ('矮', 3),
+        ('爱', 4),
+        ('人', 2),
+        ('忍', 3),
+        ('认', 4),
+        // common particles
+        ('的', 1),
+        ('了', 1),
+        ('在', 4),
+        ('有', 3),
+        ('和', 2),
+        ('不', 4),
+        ('这', 4),
+        ('那', 4),
+        ('个', 4),
+        ('上', 4),
+        ('大', 4),
+        ('来', 2),
+        ('说', 1),
+        ('出', 1),
+        ('会', 4),
+        ('可', 3),
+        ('她', 1),
+        ('他', 1),
+        ('它', 1),
+        ('天', 1),
+        ('年', 2),
+        ('日', 4),
+        ('月', 4),
+        ('东', 1),
+        ('南', 2),
+        ('西', 1),
+        ('方', 1),
+        ('学', 2),
+        ('生', 1),
+        ('工', 1),
+        ('作', 4),
+        ('成', 2),
+        ('功', 1),
+        ('应', 1),
+        ('该', 1),
+        ('朋', 2),
+        ('友', 3),
+        ('谢', 4),
+        ('上', 4),
+        ('海', 3),
+        ('伤', 1),
+        ('方', 1),
+        ('房', 2),
+        ('访', 3),
+        ('放', 4),
+        ('行', 2),
+        ('很', 3),
+        ('高', 1),
+    ];
+    pairs.iter().copied().collect()
 }

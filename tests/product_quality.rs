@@ -26,9 +26,9 @@ fn defaults_are_best_ux() {
     let _lock = lock_engine_tests();
     isolate_userdict("product-defaults");
     let engine = libpinyin::Engine::from_data_dir(data_dir()).expect("engine");
-    assert!(engine.emit_composed_sentences());
+    assert!(engine.model.config.emit_composed_sentences);
     assert_eq!(
-        engine.candidate_rank_mode(),
+        engine.model.config.candidate_rank_mode,
         CandidateRankMode::MatchedSpanThenScore
     );
 }

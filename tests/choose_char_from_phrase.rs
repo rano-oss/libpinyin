@@ -3,7 +3,7 @@
 mod common;
 
 use common::{data_dir, isolate_userdict, type_ascii};
-use libpinyin::{ImeEngine, KeyEvent, KeyResult};
+use libpinyin::{Editor, KeyEvent, KeyResult};
 
 #[test]
 fn choose_char_from_phrase_behaviour() {
@@ -12,27 +12,27 @@ fn choose_char_from_phrase_behaviour() {
     engine.set_english_enabled(false);
     engine.set_emoji_enabled(false);
     {
-        let cfg = engine.config_mut();
+        let cfg = &mut engine.model.config;
         cfg.choose_char_from_phrase = true;
         cfg.auto_suggestion = false;
     }
 
-    let mut ime = ImeEngine::with_page_size(engine.into_inner(), 9);
+    let mut ime = Editor::with_page_size(engine, 9);
     type_ascii(&mut ime, "zhongguo");
     assert_eq!(
-        ime.context().candidates.first().map(|s| s.as_str()),
+        ime.context.candidates.first().map(|s| s.as_str()),
         Some("中国"),
         "expected 中国 top-1, got {:?}",
-        ime.context().candidates
+        ime.context.candidates
     );
 
     assert_eq!(
         ime.process_key(KeyEvent::ChooseCharFromPhrase(0)),
         KeyResult::Handled
     );
-    assert_eq!(ime.context().commit_text, "中");
-    assert!(ime.context().preedit_text.is_empty());
-    assert!(ime.context().candidates.is_empty());
+    assert_eq!(ime.context.commit_text, "中");
+    assert!(ime.context.preedit_text.is_empty());
+    assert!(ime.context.candidates.is_empty());
 
     ime.reset();
     type_ascii(&mut ime, "zhongguo");
@@ -40,15 +40,15 @@ fn choose_char_from_phrase_behaviour() {
         ime.process_key(KeyEvent::ChooseCharFromPhrase(-1)),
         KeyResult::Handled
     );
-    assert_eq!(ime.context().commit_text, "国");
+    assert_eq!(ime.context.commit_text, "国");
 
-    ime.backend_mut().config_mut().choose_char_from_phrase = false;
+    ime.engine.model.config.choose_char_from_phrase = false;
     ime.reset();
     type_ascii(&mut ime, "zhongguo");
     assert_eq!(
         ime.process_key(KeyEvent::ChooseCharFromPhrase(0)),
         KeyResult::NotHandled
     );
-    assert!(ime.context().commit_text.is_empty());
-    assert!(!ime.context().candidates.is_empty());
+    assert!(ime.context.commit_text.is_empty());
+    assert!(!ime.context.candidates.is_empty());
 }

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct PinyinConfig {
     /// Base configuration fields (fuzzy, weights, sorting, etc.)
     #[serde(flatten)]
-    pub base: crate::core::Config,
+    pub base: crate::Config,
 
     /// Incomplete syllable matching (e.g. "zh", "ch", "sh" without finals)
     pub pinyin_incomplete: bool,
@@ -28,9 +28,9 @@ impl Default for PinyinConfig {
     /// Full IME profile: incomplete syllables, all corrections, full fuzzy set.
     fn default() -> Self {
         Self {
-            base: crate::core::Config {
+            base: crate::Config {
                 fuzzy: default_fuzzy_rules(),
-                ..crate::core::Config::default()
+                ..crate::Config::default()
             },
             pinyin_incomplete: true,
             correct_ue_ve: true,
@@ -56,19 +56,6 @@ impl PinyinConfig {
             || self.correct_iou_iu
             || self.correct_uei_ui
             || self.correct_on_ong
-    }
-
-    /// Convert into the base config for use with `Model::new()`.
-    pub fn into_base(self) -> crate::core::Config {
-        self.base
-    }
-
-    pub fn base(&self) -> &crate::core::Config {
-        &self.base
-    }
-
-    pub fn base_mut(&mut self) -> &mut crate::core::Config {
-        &mut self.base
     }
 }
 

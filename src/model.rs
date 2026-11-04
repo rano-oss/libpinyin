@@ -1,62 +1,10 @@
-//! Lexicon, n-gram scoring, user dictionary, and IME session primitives.
-//!
-//! Used by the pinyin facade (`Engine`, `Parser`) via `crate::core`.
+//! Shared model types: configuration, lexicon/bigram/userdict bundle, and small utilities.
+
 use serde::{Deserialize, Serialize};
 
-pub mod lexicon;
-pub use lexicon::Lexicon;
-
-pub mod word_bigram;
-pub use word_bigram::WordBigram;
-
-pub mod trie;
-pub use trie::TrieNode;
-
-pub mod fuzzy;
-pub use fuzzy::FuzzyMap;
-
-pub mod engine;
-pub use engine::{Engine, SyllableParser, SyllableType};
-
-pub mod userdict;
-pub use userdict::UserDict;
-
-pub mod emoji;
-pub use emoji::EmojiDict;
-
-pub mod english;
-pub use english::{EnglishDict, MAXIMAL_ENGLISH_CANDIDATES, MINIMAL_ENGLISH_CHARACTERS};
-
-// IME modules (flattened from ime/ subdirectory)
-pub mod candidate;
-pub use candidate::{Candidate, CandidateList};
-
-pub mod composition;
-pub use composition::{Composition, Segment};
-
-pub mod context;
-pub use context::{ImeContext, InputPurpose};
-
-pub mod input_buffer;
-pub use input_buffer::InputBuffer;
-
-pub mod session;
-pub use session::{ImeSession, InputMode};
-
-pub mod editor;
-pub use editor::{EditorResult, PhoneticEditor, PunctuationEditor, SuggestionEditor};
-
-pub mod punct;
-pub use punct::preferred_chinese_punct;
-
-pub mod helpers;
-pub use helpers::{expand_u_input, expand_v_input};
-
-pub mod tone;
-pub use tone::ToneMap;
-
-pub mod ime_engine;
-pub use ime_engine::{ImeEngine, KeyEvent, KeyResult};
+use crate::lexicon::Lexicon;
+use crate::userdict::UserDict;
+use crate::word_bigram::WordBigram;
 
 /// How to order the candidate bar after scoring.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize, Default)]
@@ -70,7 +18,7 @@ pub enum CandidateRankMode {
     PhraseLengthThenScore,
 }
 
-/// Generic configuration for IME core functionality.
+/// Generic configuration for the IME backend.
 ///
 /// This config contains only language-agnostic fields. Language-specific options
 /// (pinyin corrections, zhuyin keyboard layouts, etc.) belong in `PinyinConfig`
@@ -206,72 +154,7 @@ impl Default for Config {
 }
 
 impl Config {
-    // ========== Full/Half Width Management ==========
-
-    /// Toggle full-width mode on/off.
-    pub fn toggle_fullwidth(&mut self) {
-        self.full_width_enabled = !self.full_width_enabled;
-    }
-
-    /// Set full-width mode explicitly.
-    pub fn set_fullwidth(&mut self, enabled: bool) {
-        self.full_width_enabled = enabled;
-    }
-
-    /// Check if full-width mode is enabled.
-    pub fn is_fullwidth(&self) -> bool {
-        self.full_width_enabled
-    }
-
-    // ========== Phrase Masking API ==========
-
-    /// Add a phrase to the mask list (hide from suggestions).
-    pub fn mask_phrase(&mut self, phrase: &str) {
-        self.masked_phrases.insert(phrase.to_string());
-    }
-
-    /// Remove a phrase from the mask list (allow in suggestions).
-    pub fn unmask_phrase(&mut self, phrase: &str) -> bool {
-        self.masked_phrases.remove(phrase)
-    }
-
-    /// Check if a phrase is masked.
-    pub fn is_masked(&self, phrase: &str) -> bool {
-        self.masked_phrases.contains(phrase)
-    }
-
-    /// Clear all masked phrases.
-    pub fn clear_masked_phrases(&mut self) {
-        self.masked_phrases.clear();
-    }
-
-    /// Get all masked phrases as a sorted vector.
-    pub fn get_masked_phrases(&self) -> Vec<String> {
-        let mut phrases: Vec<_> = self.masked_phrases.iter().cloned().collect();
-        phrases.sort();
-        phrases
-    }
-
-    // ========== Selection Keys Management ==========
-
-    /// Set the selection keys string.
-    ///
-    /// # Example
-    /// ```
-    /// # use libpinyin::Config;
-    /// let mut config = Config::default();
-    /// config.set_select_keys("asdfghjkl"); // Use home row keys
-    /// ```
-    pub fn set_select_keys(&mut self, keys: &str) {
-        if !keys.is_empty() {
-            self.select_keys = keys.to_string();
-        }
-    }
-
-    /// Get the current selection keys.
-    pub fn get_select_keys(&self) -> &str {
-        &self.select_keys
-    }
+    // ========== Selection Keys ==========
 
     /// Check if a character is a selection key and return its index (0-based).
     /// Returns None if the character is not a selection key.
@@ -296,8 +179,6 @@ pub mod utils {
             .collect()
     }
 }
-
-// UserDict is implemented in `core::userdict` and exported above.
 
 /// High-level Model combining lexicon, word bigram model and user dictionary.
 ///

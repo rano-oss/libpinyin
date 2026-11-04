@@ -72,7 +72,7 @@ pub struct ImeContext {
     /// `auxiliary_text` so platforms can show page chrome without hint spam.
     pub page_text: String,
 
-    pub preedit_segments: Vec<crate::core::Segment>,
+    pub preedit_segments: Vec<crate::session::Segment>,
 
     pub input_purpose: InputPurpose,
 }
@@ -104,10 +104,5 @@ impl ImeContext {
     /// Check if there's text to commit.
     pub fn has_commit(&self) -> bool {
         !self.commit_text.is_empty()
-    }
-
-    /// Set the input purpose.
-    pub fn set_input_purpose(&mut self, purpose: InputPurpose) {
-        self.input_purpose = purpose;
     }
 }

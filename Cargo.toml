@@ -8,13 +8,16 @@ license = "GPL-3.0-or-later"
 readme = "README.md"
 repository = "https://github.com/rano-oss/libpinyin"
 homepage = "https://github.com/rano-oss/libpinyin"
+documentation = "https://docs.rs/libpinyin"
 keywords = ["pinyin", "chinese", "ime", "input-method"]
 categories = ["internationalization", "text-processing"]
-exclude = [
-    "**/*.fst",
-    "**/*.redb",
-    "/target/",
-    "lcov.info",
+include = [
+    "/src/**",
+    "/examples/**",
+    "/tests/**",
+    "/LICENSE",
+    "/README.md",
+    "/Cargo.toml",
 ]
 
 [lib]

@@ -14,8 +14,8 @@
 // - Verify exact parity with upstream DP cost model
 // - Add comprehensive test vectors from upstream test suite
 
-use crate::core::FuzzyMap;
-use crate::core::TrieNode;
+use crate::fuzzy::FuzzyMap;
+use crate::trie::TrieNode;
 
 use crate::config::PinyinConfig;
 
@@ -227,7 +227,7 @@ impl Parser {
     /// For custom penalty configuration, use `segment_best_with_config`.
     pub fn segment_best(&self, input: &str, allow_fuzzy: bool) -> Vec<Syllable> {
         // Use default config penalties
-        let config = crate::core::Config::default();
+        let config = crate::Config::default();
         self.segment_with_config(input, allow_fuzzy, None, &config)
     }
 
@@ -238,7 +238,7 @@ impl Parser {
         &self,
         input: &str,
         allow_fuzzy: bool,
-        config: &crate::core::Config,
+        config: &crate::Config,
     ) -> Vec<Syllable> {
         self.segment_with_config(input, allow_fuzzy, None, config)
     }
@@ -259,7 +259,7 @@ impl Parser {
         allow_fuzzy: bool,
         scheme_name: Option<&str>,
     ) -> Vec<Syllable> {
-        let config = crate::core::Config::default();
+        let config = crate::Config::default();
         self.segment_with_config(input, allow_fuzzy, scheme_name, &config)
     }
 
@@ -269,7 +269,7 @@ impl Parser {
         input: &str,
         allow_fuzzy: bool,
         scheme_name: Option<&str>,
-        config: &crate::core::Config,
+        config: &crate::Config,
     ) -> Vec<Syllable> {
         // If double pinyin scheme specified, try to convert
         let processed_input = if let Some(scheme) = scheme_name {
@@ -297,7 +297,7 @@ impl Parser {
         &self,
         input: &str,
         allow_fuzzy: bool,
-        config: &crate::core::Config,
+        config: &crate::Config,
     ) -> Vec<Syllable> {
         // Normalize input: lowercase and remove whitespace
         let normalized: Vec<char> = input
@@ -786,7 +786,7 @@ impl Parser {
     /// For double pinyin support, use `segment_top_k_with_scheme` instead.
     /// For custom penalty configuration, use `segment_top_k_with_config`.
     pub fn segment_top_k(&self, input: &str, k: usize, allow_fuzzy: bool) -> Vec<Vec<Syllable>> {
-        let config = crate::core::Config::default();
+        let config = crate::Config::default();
         self.segment_top_k_with_config(input, k, allow_fuzzy, None, &config)
     }
 
@@ -797,7 +797,7 @@ impl Parser {
         k: usize,
         allow_fuzzy: bool,
         scheme_name: Option<&str>,
-        config: &crate::core::Config,
+        config: &crate::Config,
     ) -> Vec<Vec<Syllable>> {
         // If double pinyin scheme specified, try to convert
         let processed_input = if let Some(scheme) = scheme_name {
@@ -834,7 +834,7 @@ impl Parser {
         allow_fuzzy: bool,
         scheme_name: Option<&str>,
     ) -> Vec<Vec<Syllable>> {
-        let config = crate::core::Config::default();
+        let config = crate::Config::default();
         self.segment_top_k_with_config(input, k, allow_fuzzy, scheme_name, &config)
     }
 
@@ -844,7 +844,7 @@ impl Parser {
         input: &str,
         k: usize,
         allow_fuzzy: bool,
-        config: &crate::core::Config,
+        config: &crate::Config,
     ) -> Vec<Vec<Syllable>> {
         // Normalize input: lowercase and remove whitespace (same as segment_best)
         let normalized: Vec<char> = input
@@ -1051,36 +1051,5 @@ impl Parser {
             out.push(st.tokens);
         }
         out
-    }
-}
-
-// Implement core::SyllableType for Syllable
-impl crate::core::SyllableType for Syllable {
-    fn text(&self) -> &str {
-        &self.text
-    }
-
-    fn is_fuzzy(&self) -> bool {
-        self.fuzzy
-    }
-}
-
-// Implement core::SyllableParser for Parser
-impl crate::core::SyllableParser for Parser {
-    type Syllable = Syllable;
-
-    fn segment_top_k(&self, input: &str, k: usize, allow_fuzzy: bool) -> Vec<Vec<Self::Syllable>> {
-        self.segment_top_k(input, k, allow_fuzzy)
-    }
-
-    fn segment_top_k_with_scheme(
-        &self,
-        input: &str,
-        k: usize,
-        allow_fuzzy: bool,
-        scheme: Option<&str>,
-    ) -> Vec<Vec<Self::Syllable>> {
-        let config = crate::core::Config::default();
-        self.segment_top_k_with_config(input, k, allow_fuzzy, scheme, &config)
     }
 }

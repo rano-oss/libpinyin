@@ -12,7 +12,7 @@ pub use corpus::{
     PROGRESSIVE_PREFIX_CASES, PROGRESSIVE_TARGET_CASES, SMOKE_CANDIDATE_INPUTS, TEST_INPUTS,
 };
 
-use libpinyin::{CandidateRankMode, ImeEngine, KeyEvent};
+use libpinyin::{CandidateRankMode, Editor, KeyEvent};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
@@ -88,7 +88,7 @@ pub fn ux_engine() -> libpinyin::Engine {
     engine
 }
 
-pub fn type_ascii(ime: &mut ImeEngine<libpinyin::parser::Parser>, s: &str) {
+pub fn type_ascii(ime: &mut Editor, s: &str) {
     for ch in s.chars() {
         let _ = ime.process_key(KeyEvent::Char(ch));
     }

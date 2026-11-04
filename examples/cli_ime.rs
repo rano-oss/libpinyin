@@ -9,7 +9,7 @@
 //!
 //! Run with: cargo run --example cli_ime
 
-use libpinyin::{Engine, ImeEngine, KeyEvent, KeyResult, Parser};
+use libpinyin::{Editor, Engine, KeyEvent, KeyResult};
 use std::io::{self, Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Loading engine from data directory...");
     let data_dir = std::env::current_dir()?.join("data/converted/simplified");
     let backend = Engine::from_data_dir(&data_dir)?;
-    let mut ime = ImeEngine::with_page_size(backend.into_inner(), 9);
+    let mut ime = Editor::with_page_size(backend, 9);
 
     println!("✓ Engine loaded successfully!");
     println!();
@@ -83,8 +83,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             display_ime_state(&ime);
 
             // If there's commit text, show it
-            if !ime.context().commit_text.is_empty() {
-                let commit = ime.context().commit_text.clone();
+            if !ime.context.commit_text.is_empty() {
+                let commit = ime.context.commit_text.clone();
                 println!("  ✓ Committed: 「{}」", commit);
                 println!();
                 // Note: In a real IME, we would clear via platform callback
@@ -100,23 +100,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn display_ime_state(ime: &ImeEngine<Parser>) {
-    let context = ime.context();
-    let session = ime.session();
+fn display_ime_state(ime: &Editor) {
+    let context = &ime.context;
+    let session = &ime.session;
 
     // Show mode and auxiliary text prominently
-    if session.is_active() {
+    if session.active {
         println!("  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
         // Mode indicator
-        let mode_icon = match session.mode() {
+        let mode_icon = match session.mode {
             libpinyin::InputMode::Phonetic => "🔤",
             libpinyin::InputMode::Punctuation => "🔣",
             libpinyin::InputMode::Suggestion => "💡",
             libpinyin::InputMode::Init => "⏸",
             libpinyin::InputMode::Passthrough => "🔄",
         };
-        println!("  {} Mode: {:?}", mode_icon, session.mode());
+        println!("  {} Mode: {:?}", mode_icon, session.mode);
 
         // Auxiliary text (helpful hints)
         if !context.auxiliary_text.is_empty() {
@@ -144,7 +144,7 @@ fn display_ime_state(ime: &ImeEngine<Parser>) {
         }
     }
 
-    if session.is_active() {
+    if session.active {
         println!("  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 }

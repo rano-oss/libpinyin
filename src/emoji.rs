@@ -3,7 +3,7 @@
 //! Format: `<keyword>\t<emoji>\t<id>\t<frequency>`
 //!
 //! The dict only answers lookups. Whether emoji appear in the candidate bar,
-//! and where, is decided by the engine merge helpers or the UI.
+//! and where, is decided by the backend merge helpers or the UI.
 
 use std::collections::HashMap;
 use std::path::Path;

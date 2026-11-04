@@ -1,13 +1,8 @@
-//! Editor trait and implementations for different input modes.
-//!
-//! The editor architecture provides pluggable input handlers for different
-//! modes (phonetic, punctuation, suggestions). Each editor implements the
-//! `Editor` trait and processes key events in its specific context.
+//! Mode-specific key handlers (phonetic, punctuation, suggestion).
 
-use crate::core::candidate::Candidate;
-use crate::core::engine::{Engine, SyllableParser};
-use crate::core::ime_engine::KeyEvent;
-use crate::core::session::ImeSession;
+use super::KeyEvent;
+use crate::engine::Engine;
+use crate::session::{Candidate, ImeSession};
 use std::collections::HashMap;
 
 /// Result of processing a key event in an editor.
@@ -26,20 +21,20 @@ pub enum EditorResult {
     CommitPartial(String, usize),
 
     /// Request to switch to a different mode
-    ModeSwitch(crate::core::session::InputMode),
+    ModeSwitch(crate::InputMode),
 
     /// Key not handled by this editor, pass to parent
     PassThrough,
 }
 
 // ============================================================================
-// PhoneticEditor - Phonetic input (pinyin/zhuyin)
+// PhoneticEditor - Phonetic input (pinyin)
 // ============================================================================
 
-/// Phonetic input editor (pinyin/zhuyin).
+/// Phonetic input editor (pinyin).
 ///
 /// This is the main editor for Chinese character input via phonetic typing.
-/// It takes raw pinyin/zhuyin input, queries the backend engine for candidates,
+/// It takes raw pinyin input, queries the engine for candidates,
 /// and handles selection/commit.
 ///
 #[derive(Default)]
@@ -55,35 +50,31 @@ impl PhoneticEditor {
     }
 
     /// Handle character input
-    fn handle_char<P: SyllableParser>(
+    fn handle_char(
         &mut self,
         ch: char,
         session: &mut ImeSession,
-        backend: &mut Engine<P>,
+        engine: &mut Engine,
     ) -> EditorResult {
         // Add to input buffer
-        session.input_buffer_mut().insert_char(ch);
+        session.input_buffer.insert_char(ch);
 
         // Update candidates
-        self.update_candidates(session, backend);
+        self.update_candidates(session, engine);
 
         EditorResult::Handled
     }
 
     /// Handle backspace.
-    fn handle_backspace<P: SyllableParser>(
-        &mut self,
-        session: &mut ImeSession,
-        backend: &mut Engine<P>,
-    ) -> EditorResult {
-        let deleted = session.input_buffer_mut().delete_before();
+    fn handle_backspace(&mut self, session: &mut ImeSession, engine: &mut Engine) -> EditorResult {
+        let deleted = session.input_buffer.delete_before();
 
         if deleted {
-            if session.input_buffer().text().is_empty() {
+            if session.input_buffer.text().is_empty() {
                 // No more input, reset
                 EditorResult::CommitAndReset(String::new())
             } else {
-                self.update_candidates(session, backend);
+                self.update_candidates(session, engine);
                 EditorResult::Handled
             }
         } else {
@@ -92,18 +83,14 @@ impl PhoneticEditor {
     }
 
     /// Handle delete key.
-    fn handle_delete<P: SyllableParser>(
-        &mut self,
-        session: &mut ImeSession,
-        backend: &mut Engine<P>,
-    ) -> EditorResult {
-        let deleted = session.input_buffer_mut().delete_after();
+    fn handle_delete(&mut self, session: &mut ImeSession, engine: &mut Engine) -> EditorResult {
+        let deleted = session.input_buffer.delete_after();
 
         if deleted {
-            if session.input_buffer().text().is_empty() {
+            if session.input_buffer.text().is_empty() {
                 EditorResult::CommitAndReset(String::new())
             } else {
-                self.update_candidates(session, backend);
+                self.update_candidates(session, engine);
                 EditorResult::Handled
             }
         } else {
@@ -112,23 +99,19 @@ impl PhoneticEditor {
     }
 
     /// Handle space (select first candidate).
-    fn handle_space<P: SyllableParser>(
-        &mut self,
-        session: &mut ImeSession,
-        backend: &mut Engine<P>,
-    ) -> EditorResult {
-        if session.candidates().is_empty() {
+    fn handle_space(&mut self, session: &mut ImeSession, engine: &mut Engine) -> EditorResult {
+        if session.candidates.is_empty() {
             // No candidates, just insert space
             return EditorResult::CommitAndReset(" ".to_string());
         }
 
         // Select first candidate
-        if let Some(candidate) = session.candidates().selected_candidate() {
+        if let Some(candidate) = session.candidates.selected_candidate() {
             let text = candidate.text.clone();
             let input_consumed = candidate.input_consumed;
 
             // Learn the phrase
-            backend.commit(&text);
+            engine.commit(&text);
 
             if let Some(consumed) = input_consumed {
                 EditorResult::CommitPartial(text, consumed)
@@ -141,15 +124,11 @@ impl PhoneticEditor {
     }
 
     /// Handle enter (commit selection or raw input).
-    fn handle_enter<P: SyllableParser>(
-        &mut self,
-        session: &mut ImeSession,
-        backend: &mut Engine<P>,
-    ) -> EditorResult {
-        if let Some(candidate) = session.candidates().selected_candidate() {
+    fn handle_enter(&mut self, session: &mut ImeSession, engine: &mut Engine) -> EditorResult {
+        if let Some(candidate) = session.candidates.selected_candidate() {
             let text = candidate.text.clone();
             let input_consumed = candidate.input_consumed;
-            backend.commit(&text);
+            engine.commit(&text);
             if let Some(consumed) = input_consumed {
                 EditorResult::CommitPartial(text, consumed)
             } else {
@@ -157,19 +136,19 @@ impl PhoneticEditor {
             }
         } else {
             // Commit raw input
-            let raw = session.input_buffer().text().to_string();
+            let raw = session.input_buffer.text().to_string();
             EditorResult::CommitAndReset(raw)
         }
     }
 
     /// Handle number key for candidate selection (1-9).
-    fn handle_number<P: SyllableParser>(
+    fn handle_number(
         &mut self,
         n: u8,
         session: &mut ImeSession,
-        backend: &mut Engine<P>,
+        engine: &mut Engine,
     ) -> EditorResult {
-        if session.candidates().is_empty() {
+        if session.candidates.is_empty() {
             return EditorResult::PassThrough;
         }
 
@@ -178,10 +157,10 @@ impl PhoneticEditor {
         }
 
         let index = (n - 1) as usize;
-        if let Some(candidate) = session.candidates_mut().select_by_index(index) {
+        if let Some(candidate) = session.candidates.select_by_index(index) {
             let text = candidate.text.clone();
             let input_consumed = candidate.input_consumed;
-            backend.commit(&text);
+            engine.commit(&text);
             if let Some(consumed) = input_consumed {
                 EditorResult::CommitPartial(text, consumed)
             } else {
@@ -192,12 +171,7 @@ impl PhoneticEditor {
         }
     }
 
-    fn inline_predictions<P: SyllableParser>(
-        &self,
-        lambda: f32,
-        top_n: usize,
-        backend: &Engine<P>,
-    ) -> Vec<Candidate> {
+    fn inline_predictions(&self, lambda: f32, top_n: usize, engine: &Engine) -> Vec<Candidate> {
         let ctx = self.predict_context.trim();
         if ctx.is_empty() {
             return Vec::new();
@@ -206,8 +180,8 @@ impl PhoneticEditor {
         let max_suffix = chars.len().min(4);
         for len in (1..=max_suffix).rev() {
             let key: String = chars[chars.len() - len..].iter().collect();
-            let mut preds = backend
-                .model()
+            let mut preds = engine
+                .model
                 .word_bigram
                 .get_predictions(&key, lambda, top_n);
             if preds.is_empty() {
@@ -217,7 +191,7 @@ impl PhoneticEditor {
             return preds
                 .drain(..)
                 .take(top_n)
-                .filter(|(w, _)| !backend.is_phrase_hidden(w))
+                .filter(|(w, _)| !engine.is_phrase_hidden(w))
                 .map(|(w, s)| Candidate::new(w, s - 0.5))
                 .collect();
         }
@@ -225,20 +199,20 @@ impl PhoneticEditor {
     }
 
     /// Forget the highlighted candidate (remove from user history + mask).
-    fn handle_forget_word<P: SyllableParser>(
+    fn handle_forget_word(
         &mut self,
         session: &mut ImeSession,
-        backend: &mut Engine<P>,
+        engine: &mut Engine,
     ) -> EditorResult {
-        let Some(candidate) = session.candidates().selected_candidate() else {
+        let Some(candidate) = session.candidates.selected_candidate() else {
             return EditorResult::PassThrough;
         };
         let phrase = candidate.text.clone();
         if phrase.is_empty() {
             return EditorResult::PassThrough;
         }
-        backend.forget_phrase(&phrase);
-        self.update_candidates(session, backend);
+        engine.forget_phrase(&phrase);
+        self.update_candidates(session, engine);
         // Keep composing with the same input; just drop the forgotten item.
         EditorResult::Handled
     }
@@ -249,16 +223,16 @@ impl PhoneticEditor {
     /// Consumes the same pinyin span as selecting the whole phrase (fcitx
     /// `selectCustom` behaviour) — useful when a rare character is easier to
     /// find inside a common word.
-    fn handle_choose_char_from_phrase<P: SyllableParser>(
+    fn handle_choose_char_from_phrase(
         &mut self,
         char_index: i32,
         session: &mut ImeSession,
-        backend: &mut Engine<P>,
+        engine: &mut Engine,
     ) -> EditorResult {
-        if !backend.config().choose_char_from_phrase {
+        if !engine.model.config.choose_char_from_phrase {
             return EditorResult::PassThrough;
         }
-        let Some(candidate) = session.candidates().selected_candidate() else {
+        let Some(candidate) = session.candidates.selected_candidate() else {
             return EditorResult::PassThrough;
         };
         let chars: Vec<char> = candidate.text.chars().collect();
@@ -275,7 +249,7 @@ impl PhoneticEditor {
         }
         let ch = chars[idx].to_string();
         let input_consumed = candidate.input_consumed;
-        backend.commit(&ch);
+        engine.commit(&ch);
         if let Some(consumed) = input_consumed {
             EditorResult::CommitPartial(ch, consumed)
         } else {
@@ -283,51 +257,51 @@ impl PhoneticEditor {
         }
     }
 
-    pub fn process_key<P: SyllableParser>(
+    pub fn process_key(
         &mut self,
         key: KeyEvent,
         session: &mut ImeSession,
-        backend: &mut Engine<P>,
+        engine: &mut Engine,
     ) -> EditorResult {
         match key {
-            KeyEvent::Char(ch) => self.handle_char(ch, session, backend),
-            KeyEvent::Backspace => self.handle_backspace(session, backend),
-            KeyEvent::Delete => self.handle_delete(session, backend),
-            KeyEvent::Space => self.handle_space(session, backend),
-            KeyEvent::Enter => self.handle_enter(session, backend),
-            KeyEvent::Number(n) => self.handle_number(n, session, backend),
+            KeyEvent::Char(ch) => self.handle_char(ch, session, engine),
+            KeyEvent::Backspace => self.handle_backspace(session, engine),
+            KeyEvent::Delete => self.handle_delete(session, engine),
+            KeyEvent::Space => self.handle_space(session, engine),
+            KeyEvent::Enter => self.handle_enter(session, engine),
+            KeyEvent::Number(n) => self.handle_number(n, session, engine),
             KeyEvent::ChooseCharFromPhrase(idx) => {
-                self.handle_choose_char_from_phrase(idx, session, backend)
+                self.handle_choose_char_from_phrase(idx, session, engine)
             }
-            KeyEvent::ForgetWord => self.handle_forget_word(session, backend),
+            KeyEvent::ForgetWord => self.handle_forget_word(session, engine),
             KeyEvent::PinPhrase | KeyEvent::Tab => EditorResult::PassThrough,
 
             // Cursor navigation - update session but stay in mode
             KeyEvent::Left => {
-                session.input_buffer_mut().move_left();
-                self.update_candidates(session, backend);
+                session.input_buffer.move_left();
+                self.update_candidates(session, engine);
                 EditorResult::Handled
             }
             KeyEvent::Right => {
-                session.input_buffer_mut().move_right();
-                self.update_candidates(session, backend);
+                session.input_buffer.move_right();
+                self.update_candidates(session, engine);
                 EditorResult::Handled
             }
             KeyEvent::Home => {
-                session.input_buffer_mut().move_to_start();
-                self.update_candidates(session, backend);
+                session.input_buffer.move_to_start();
+                self.update_candidates(session, engine);
                 EditorResult::Handled
             }
             KeyEvent::End => {
-                session.input_buffer_mut().move_to_end();
-                self.update_candidates(session, backend);
+                session.input_buffer.move_to_end();
+                self.update_candidates(session, engine);
                 EditorResult::Handled
             }
             KeyEvent::Up => {
-                if !session.candidates().is_empty() {
-                    if !session.candidates_mut().cursor_up() {
+                if !session.candidates.is_empty() {
+                    if !session.candidates.cursor_up() {
                         // At top of page, go to previous page and select last item
-                        let candidates = session.candidates_mut();
+                        let candidates = &mut session.candidates;
                         if candidates.page_up() {
                             let page_len = candidates.current_page_candidates().len();
                             if page_len > 0 {
@@ -341,10 +315,10 @@ impl PhoneticEditor {
                 }
             }
             KeyEvent::Down => {
-                if !session.candidates().is_empty() {
-                    if !session.candidates_mut().cursor_down() {
+                if !session.candidates.is_empty() {
+                    if !session.candidates.cursor_down() {
                         // At bottom of page, go to next page and select first item
-                        let candidates = session.candidates_mut();
+                        let candidates = &mut session.candidates;
                         if candidates.page_down() {
                             candidates.select_by_index(0);
                         }
@@ -355,43 +329,39 @@ impl PhoneticEditor {
                 }
             }
             KeyEvent::PageUp => {
-                if !session.candidates().is_empty() {
-                    session.candidates_mut().page_up();
+                if !session.candidates.is_empty() {
+                    session.candidates.page_up();
                     EditorResult::Handled
                 } else {
                     EditorResult::PassThrough
                 }
             }
             KeyEvent::PageDown => {
-                if !session.candidates().is_empty() {
-                    session.candidates_mut().page_down();
+                if !session.candidates.is_empty() {
+                    session.candidates.page_down();
                     EditorResult::Handled
                 } else {
                     EditorResult::PassThrough
                 }
             }
             KeyEvent::Escape => EditorResult::CommitAndReset(String::new()),
-            // Global shortcuts handled by ImeEngine before routing
+            // Global shortcuts handled by Editor before routing
             KeyEvent::Ctrl(_) | KeyEvent::ShiftLock => EditorResult::PassThrough,
         }
     }
 
-    pub fn update_candidates<P: SyllableParser>(
-        &mut self,
-        session: &mut ImeSession,
-        backend: &mut Engine<P>,
-    ) {
-        let input = session.input_buffer().text().to_string();
+    pub fn update_candidates(&mut self, session: &mut ImeSession, engine: &mut Engine) {
+        let input = session.input_buffer.text().to_string();
 
         if input.is_empty() {
-            session.candidates_mut().clear();
+            session.candidates.clear();
             return;
         }
 
-        let v_on = backend.config().v_mode_enabled;
-        let u_on = backend.config().u_mode_enabled;
-        let inline = backend.config().inline_prediction;
-        let lambda = backend.config().lambda;
+        let v_on = engine.model.config.v_mode_enabled;
+        let u_on = engine.model.config.u_mode_enabled;
+        let inline = engine.model.config.inline_prediction;
+        let lambda = engine.model.config.lambda;
 
         let mut candidates: Vec<Candidate> = Vec::new();
 
@@ -399,13 +369,13 @@ impl PhoneticEditor {
         if v_on && input.starts_with('v') && input.len() >= 2 {
             let rest = &input[1..];
             if rest.chars().all(|c| c.is_ascii_digit()) {
-                candidates.extend(crate::core::expand_v_input(rest));
+                candidates.extend(expand_v_input(rest));
             }
         }
         if u_on && input.starts_with('u') && input.len() >= 2 {
             let rest = &input[1..];
             if rest.chars().all(|c| c.is_ascii_alphabetic()) {
-                candidates.extend(crate::core::expand_u_input(rest));
+                candidates.extend(expand_u_input(rest));
             }
         }
 
@@ -413,12 +383,12 @@ impl PhoneticEditor {
             && ((v_on && input.starts_with('v')) || (u_on && input.starts_with('u')));
 
         if !helper_only {
-            let mut backend_candidates = backend.input(&input);
+            let mut engine_candidates = engine.input(&input);
             // Inline predictions (Mac-style): insert after top-1.
-            if inline && !self.predict_context.is_empty() && !backend_candidates.is_empty() {
-                let preds = self.inline_predictions(lambda, 2, backend);
+            if inline && !self.predict_context.is_empty() && !engine_candidates.is_empty() {
+                let preds = self.inline_predictions(lambda, 2, engine);
                 if !preds.is_empty() {
-                    let top = backend_candidates.remove(0);
+                    let top = engine_candidates.remove(0);
                     let mut merged = vec![top];
                     let mut seen: std::collections::HashSet<String> =
                         merged.iter().map(|c| c.text.clone()).collect();
@@ -427,17 +397,17 @@ impl PhoneticEditor {
                             merged.push(p);
                         }
                     }
-                    merged.extend(backend_candidates);
-                    backend_candidates = merged;
+                    merged.extend(engine_candidates);
+                    engine_candidates = merged;
                 }
             }
             // Prefer helpers first when both exist (v123 still shows 一二三 above pinyin).
             if candidates.is_empty() {
-                candidates = backend_candidates;
+                candidates = engine_candidates;
             } else {
                 let mut seen: std::collections::HashSet<String> =
                     candidates.iter().map(|c| c.text.clone()).collect();
-                for c in backend_candidates {
+                for c in engine_candidates {
                     if seen.insert(c.text.clone()) {
                         candidates.push(c);
                     }
@@ -445,14 +415,14 @@ impl PhoneticEditor {
             }
         }
 
-        session.candidates_mut().set_candidates(candidates);
+        session.candidates.set_candidates(candidates);
 
         // Update composition with syllable-separated preedit (e.g., "wo'de"),
         // or raw typed keys when double-pinyin + show_raw is enabled.
-        let input_cursor = session.input_buffer().cursor();
+        let input_cursor = session.input_buffer.cursor();
         let show_raw =
-            backend.double_pinyin_scheme().is_some() && backend.config().show_raw_double_pinyin;
-        let composition = session.composition_mut();
+            engine.double_pinyin_scheme.is_some() && engine.model.config.show_raw_double_pinyin;
+        let composition = &mut session.composition;
         if show_raw {
             composition.set_text(input.clone());
             composition.set_cursor(input_cursor);
@@ -460,7 +430,7 @@ impl PhoneticEditor {
                 composition.add_segment(0..input.len(), false);
             }
         } else {
-            let (preedit, cursor) = backend.preedit_with_separators(&input, input_cursor);
+            let (preedit, cursor) = engine.preedit_with_separators(&input, input_cursor);
             composition.set_text(preedit);
             composition.set_cursor(cursor);
             composition.set_syllable_segments_from_preedit();
@@ -468,19 +438,7 @@ impl PhoneticEditor {
     }
 
     pub fn reset(&mut self) {
-        // PhoneticEditor is stateless - backend Engine handles state
-    }
-
-    pub fn name(&self) -> &'static str {
-        "PhoneticEditor"
-    }
-
-    pub fn can_handle(&self, key: &KeyEvent) -> bool {
-        // Lowercase always; digits only for v-mode numeral entry.
-        match key {
-            KeyEvent::Char(ch) => ch.is_ascii_lowercase() || ch.is_ascii_digit(),
-            _ => true,
-        }
+        // PhoneticEditor is mostly buffer-driven; `Engine` does lookup
     }
 }
 
@@ -507,34 +465,19 @@ impl SuggestionEditor {
     ///
     /// This should be called after committing text to show predictions
     /// for the next word.
-    pub fn activate<P: SyllableParser>(
-        &mut self,
-        previous_text: &str,
-        session: &mut ImeSession,
-        backend: &mut Engine<P>,
-    ) {
+    pub fn activate(&mut self, previous_text: &str, session: &mut ImeSession, engine: &mut Engine) {
         self.context = previous_text.to_string();
         self.active = true;
 
         // Generate prediction candidates
         // Note: This is a simplified implementation. A full implementation
         // would use the n-gram model to predict next words based on context.
-        self.update_candidates(session, backend);
-    }
-
-    /// Check if suggestions are currently active.
-    pub fn is_active(&self) -> bool {
-        self.active
-    }
-
-    /// Get the current context.
-    pub fn context(&self) -> &str {
-        &self.context
+        self.update_candidates(session, engine);
     }
 
     /// Learn user bigram when a prediction is selected.
-    fn learn_selection<P: SyllableParser>(&self, selected_text: &str, backend: &mut Engine<P>) {
-        if !backend.config().learning_enabled || backend.input_purpose().disables_learning() {
+    fn learn_selection(&self, selected_text: &str, engine: &mut Engine) {
+        if !engine.model.config.learning_enabled || engine.input_purpose.disables_learning() {
             return;
         }
         let chars: Vec<char> = self.context.chars().collect();
@@ -543,21 +486,21 @@ impl SuggestionEditor {
             let selected_chars: Vec<char> = selected_text.chars().collect();
             if let Some(&first_selected) = selected_chars.first() {
                 let w2 = first_selected.to_string();
-                backend.userdict_mut().learn_bigram(&w1, &w2);
+                engine.model.userdict.learn_bigram(&w1, &w2);
             }
         }
     }
 
-    pub fn process_key<P: SyllableParser>(
+    pub fn process_key(
         &mut self,
         key: KeyEvent,
         session: &mut ImeSession,
-        backend: &mut Engine<P>,
+        engine: &mut Engine,
     ) -> EditorResult {
         match key {
             // Character input - exit suggestion mode and switch to phonetic
             KeyEvent::Char(ch) if ch.is_ascii_lowercase() => {
-                EditorResult::ModeSwitch(super::session::InputMode::Phonetic)
+                EditorResult::ModeSwitch(crate::session::InputMode::Phonetic)
             }
 
             // Number selection
@@ -567,18 +510,18 @@ impl SuggestionEditor {
                 }
 
                 let index = (n - 1) as usize;
-                if let Some(candidate) = session.candidates_mut().select_by_index(index) {
+                if let Some(candidate) = session.candidates.select_by_index(index) {
                     let text = candidate.text.clone();
 
                     // Learn user bigram for personalization
-                    self.learn_selection(&text, backend);
+                    self.learn_selection(&text, engine);
 
                     // Learn the selection in userdict
-                    backend.commit(&text);
+                    engine.commit(&text);
 
                     // Stay in suggestion mode with new context
                     self.context.push_str(&text);
-                    self.update_candidates(session, backend);
+                    self.update_candidates(session, engine);
 
                     EditorResult::Commit(text)
                 } else {
@@ -588,17 +531,17 @@ impl SuggestionEditor {
 
             // Space - select first candidate
             KeyEvent::Space => {
-                if let Some(candidate) = session.candidates().selected_candidate() {
+                if let Some(candidate) = session.candidates.selected_candidate() {
                     let text = candidate.text.clone();
 
                     // Learn user bigram
-                    self.learn_selection(&text, backend);
+                    self.learn_selection(&text, engine);
 
-                    backend.commit(&text);
+                    engine.commit(&text);
 
                     // Update context and stay in suggestion mode
                     self.context.push_str(&text);
-                    self.update_candidates(session, backend);
+                    self.update_candidates(session, engine);
 
                     EditorResult::Commit(text)
                 } else {
@@ -612,32 +555,32 @@ impl SuggestionEditor {
 
             // Navigation
             KeyEvent::Up => {
-                if !session.candidates().is_empty() {
-                    session.candidates_mut().cursor_up();
+                if !session.candidates.is_empty() {
+                    session.candidates.cursor_up();
                     EditorResult::Handled
                 } else {
                     EditorResult::PassThrough
                 }
             }
             KeyEvent::Down => {
-                if !session.candidates().is_empty() {
-                    session.candidates_mut().cursor_down();
+                if !session.candidates.is_empty() {
+                    session.candidates.cursor_down();
                     EditorResult::Handled
                 } else {
                     EditorResult::PassThrough
                 }
             }
             KeyEvent::PageUp => {
-                if !session.candidates().is_empty() {
-                    session.candidates_mut().page_up();
+                if !session.candidates.is_empty() {
+                    session.candidates.page_up();
                     EditorResult::Handled
                 } else {
                     EditorResult::PassThrough
                 }
             }
             KeyEvent::PageDown => {
-                if !session.candidates().is_empty() {
-                    session.candidates_mut().page_down();
+                if !session.candidates.is_empty() {
+                    session.candidates.page_down();
                     EditorResult::Handled
                 } else {
                     EditorResult::PassThrough
@@ -648,12 +591,12 @@ impl SuggestionEditor {
             KeyEvent::Escape => EditorResult::CommitAndReset(String::new()),
 
             KeyEvent::ForgetWord => {
-                let Some(candidate) = session.candidates().selected_candidate() else {
+                let Some(candidate) = session.candidates.selected_candidate() else {
                     return EditorResult::PassThrough;
                 };
                 let phrase = candidate.text.clone();
-                backend.forget_phrase(&phrase);
-                self.update_candidates(session, backend);
+                engine.forget_phrase(&phrase);
+                self.update_candidates(session, engine);
                 EditorResult::Handled
             }
 
@@ -665,18 +608,14 @@ impl SuggestionEditor {
         }
     }
 
-    pub fn update_candidates<P: SyllableParser>(
-        &mut self,
-        session: &mut ImeSession,
-        backend: &mut Engine<P>,
-    ) {
+    pub fn update_candidates(&mut self, session: &mut ImeSession, engine: &mut Engine) {
         if self.context.is_empty() {
-            session.candidates_mut().clear();
+            session.candidates.clear();
             return;
         }
 
         let context = self.context.trim();
-        let lambda = backend.config().lambda;
+        let lambda = engine.model.config.lambda;
 
         // Mac/Windows-style 联想: try longest known suffix first (full commit →
         // multi-char tail → last char). Word-bigram keys are phrases/chars, not
@@ -687,12 +626,9 @@ impl SuggestionEditor {
         for len in (1..=max_suffix).rev() {
             let start = chars.len() - len;
             let key: String = chars[start..].iter().collect();
-            let word_predictions = backend
-                .model()
-                .word_bigram
-                .get_predictions(&key, lambda, 12);
+            let word_predictions = engine.model.word_bigram.get_predictions(&key, lambda, 12);
             for (word, score) in word_predictions {
-                if backend.is_phrase_hidden(&word) {
+                if engine.is_phrase_hidden(&word) {
                     continue;
                 }
                 if let Some(existing) = combined.iter_mut().find(|(w, _)| *w == word) {
@@ -704,8 +640,8 @@ impl SuggestionEditor {
                     combined.push((word, score));
                 }
             }
-            for (word, user_count) in backend.userdict().get_bigrams_after(&key) {
-                if backend.is_phrase_hidden(&word) {
+            for (word, user_count) in engine.model.userdict.get_bigrams_after(&key) {
+                if engine.is_phrase_hidden(&word) {
                     continue;
                 }
                 let user_boost = (1.0 + user_count as f32).ln() + 0.5;
@@ -729,7 +665,7 @@ impl SuggestionEditor {
                 .into_iter()
                 .map(|(word, score)| Candidate::new(word, score))
                 .collect();
-            session.candidates_mut().set_candidates(candidates);
+            session.candidates.set_candidates(candidates);
         } else {
             // Fallback particles (common after any commit).
             let candidates = vec![
@@ -740,23 +676,15 @@ impl SuggestionEditor {
                 Candidate::new("吧", 0.06),
                 Candidate::new("啊", 0.05),
             ];
-            session.candidates_mut().set_candidates(candidates);
+            session.candidates.set_candidates(candidates);
         }
 
-        session.composition_mut().clear();
+        session.composition.clear();
     }
 
     pub fn reset(&mut self) {
         self.context.clear();
         self.active = false;
-    }
-
-    pub fn name(&self) -> &'static str {
-        "SuggestionEditor"
-    }
-
-    pub fn can_handle(&self, _key: &KeyEvent) -> bool {
-        self.active
     }
 }
 
@@ -845,12 +773,12 @@ impl PunctuationEditor {
                 .map(|&s| Candidate::new(s, 1.0))
                 .collect();
 
-            session.candidates_mut().set_candidates(candidates);
+            session.candidates.set_candidates(candidates);
 
             // Set preedit to show the original key
-            session.composition_mut().preedit = key.to_string();
+            session.composition.preedit = key.to_string();
             // Byte offset at end of the key (ASCII here, but keep UTF-8 safe).
-            session.composition_mut().cursor = key.len_utf8();
+            session.composition.cursor = key.len_utf8();
 
             true
         } else {
@@ -861,7 +789,7 @@ impl PunctuationEditor {
     /// Handle selection of a punctuation candidate.
     fn select_candidate(&mut self, session: &mut ImeSession) -> Option<String> {
         session
-            .candidates()
+            .candidates
             .selected_candidate()
             .map(|candidate| candidate.text.clone())
     }
@@ -875,7 +803,7 @@ impl PunctuationEditor {
                 }
 
                 let index = (n - 1) as usize;
-                if let Some(candidate) = session.candidates_mut().select_by_index(index) {
+                if let Some(candidate) = session.candidates.select_by_index(index) {
                     let text = candidate.text.clone();
                     EditorResult::CommitAndReset(text)
                 } else {
@@ -894,21 +822,21 @@ impl PunctuationEditor {
 
             // Up/Down for candidate navigation
             KeyEvent::Up => {
-                session.candidates_mut().cursor_up();
+                session.candidates.cursor_up();
                 EditorResult::Handled
             }
             KeyEvent::Down => {
-                session.candidates_mut().cursor_down();
+                session.candidates.cursor_down();
                 EditorResult::Handled
             }
 
             // Page navigation
             KeyEvent::PageUp => {
-                session.candidates_mut().page_up();
+                session.candidates.page_up();
                 EditorResult::Handled
             }
             KeyEvent::PageDown => {
-                session.candidates_mut().page_down();
+                session.candidates.page_down();
                 EditorResult::Handled
             }
 
@@ -933,23 +861,200 @@ impl PunctuationEditor {
         }
     }
 
-    pub fn update_candidates(&mut self, _session: &mut ImeSession) {
-        // Punctuation candidates are set on activation, no dynamic updates
-    }
-
     pub fn reset(&mut self) {
         self.active_key = None;
     }
+}
 
-    pub fn name(&self) -> &'static str {
-        "PunctuationEditor"
+/// Preferred Chinese punctuation for an ASCII key (Mac/Windows 中-mode default).
+///
+/// Returns the primary form that should be committed immediately without a picker.
+pub fn preferred_chinese_punct(ch: char) -> Option<&'static str> {
+    match ch {
+        ',' => Some("，"),
+        '.' => Some("。"),
+        ';' => Some("；"),
+        ':' => Some("："),
+        '?' => Some("？"),
+        '!' => Some("！"),
+        '"' => Some("\u{201C}"),
+        '\'' => Some("\u{2018}"),
+        '(' => Some("（"),
+        ')' => Some("）"),
+        '[' => Some("【"),
+        ']' => Some("】"),
+        '{' => Some("「"),
+        '}' => Some("」"),
+        '<' => Some("《"),
+        '>' => Some("》"),
+        '~' => Some("～"),
+        '\\' => Some("、"),
+        '^' => Some("……"),
+        '$' => Some("￥"),
+        _ => None,
     }
+}
 
-    pub fn can_handle(&self, key: &KeyEvent) -> bool {
-        // Can handle most keys when active
-        !matches!(
-            key,
-            KeyEvent::Char(_) | KeyEvent::Backspace | KeyEvent::Delete
-        )
+// ========== Windows-style `v` / `u` input helpers (numerals, dates, symbols) ==========
+
+const DIGITS_CN: &[char] = &['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+
+fn digit_to_cn(d: u8) -> Option<char> {
+    if d <= 9 {
+        Some(DIGITS_CN[d as usize])
+    } else {
+        None
     }
+}
+
+fn digits_to_chinese(s: &str) -> Option<String> {
+    if s.is_empty() || !s.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let mut out = String::with_capacity(s.len() * 3);
+    for c in s.chars() {
+        let d = (c as u8) - b'0';
+        out.push(digit_to_cn(d)?);
+    }
+    Some(out)
+}
+
+fn year_forms(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(cn) = digits_to_chinese(s) {
+        out.push(cn.clone());
+        out.push(format!("{cn}年"));
+        if s.len() == 4 {
+            out.push(format!("{s}年"));
+        }
+    }
+    out
+}
+
+/// Expand `v`-mode remainder (buffer after leading `v`) into helper candidates.
+fn expand_v_input(rest: &str) -> Vec<Candidate> {
+    let rest = rest.trim();
+    if rest.is_empty() {
+        return Vec::new();
+    }
+    let mut texts: Vec<String> = Vec::new();
+    if rest.chars().all(|c| c.is_ascii_digit()) {
+        if let Some(cn) = digits_to_chinese(rest) {
+            texts.push(cn);
+        }
+        if rest.len() == 4 {
+            texts.extend(year_forms(rest));
+        } else if rest.len() == 8 {
+            // YYYYMMDD → 二〇二六年十月四日-style + numeric date
+            let y = &rest[0..4];
+            let m = &rest[4..6];
+            let d = &rest[6..8];
+            if let (Ok(mi), Ok(di)) = (m.parse::<u32>(), d.parse::<u32>()) {
+                if (1..=12).contains(&mi) && (1..=31).contains(&di) {
+                    texts.push(format!("{y}年{mi}月{di}日"));
+                    if let (Some(yc), Some(mc), Some(dc)) = (
+                        digits_to_chinese(y),
+                        digits_to_chinese(&mi.to_string()),
+                        digits_to_chinese(&di.to_string()),
+                    ) {
+                        texts.push(format!("{yc}年{mc}月{dc}日"));
+                    }
+                }
+            }
+        }
+    }
+    // Dedup preserving order
+    let mut seen = std::collections::HashSet::new();
+    texts
+        .into_iter()
+        .filter(|t| seen.insert(t.clone()))
+        .enumerate()
+        .map(|(i, t)| Candidate::new(t, 10.0 - i as f32 * 0.1))
+        .collect()
+}
+
+/// Small offline symbol table for `u`-mode (code → symbol).
+fn u_symbol(code: &str) -> Option<&'static str> {
+    match code.to_ascii_lowercase().as_str() {
+        "heart" | "xin" => Some("♥"),
+        "star" | "xing" => Some("★"),
+        "smile" => Some("☺"),
+        "arrow" | "right" => Some("→"),
+        "left" => Some("←"),
+        "up" => Some("↑"),
+        "down" => Some("↓"),
+        "check" | "ok" => Some("✓"),
+        "cross" | "x" => Some("✗"),
+        "dot" => Some("·"),
+        "deg" | "degree" => Some("°"),
+        "celsius" | "sheshi" => Some("℃"),
+        "euro" => Some("€"),
+        "pound" => Some("£"),
+        "yen" | "rmb" | "yuan" => Some("¥"),
+        "copy" | "copyright" => Some("©"),
+        "tm" => Some("™"),
+        "reg" => Some("®"),
+        "infty" | "inf" => Some("∞"),
+        "neq" => Some("≠"),
+        "leq" => Some("≤"),
+        "geq" => Some("≥"),
+        "plusminus" | "pm" => Some("±"),
+        "multiply" | "times" => Some("×"),
+        "divide" => Some("÷"),
+        "section" => Some("§"),
+        "para" | "pilcrow" => Some("¶"),
+        "bullet" => Some("•"),
+        "ellipsis" | "ddd" => Some("…"),
+        "dash" | "em" => Some("—"),
+        "square" => Some("■"),
+        "circle" => Some("●"),
+        "diamond" => Some("◆"),
+        "spade" => Some("♠"),
+        "club" => Some("♣"),
+        "diamond2" => Some("♦"),
+        "male" => Some("♂"),
+        "female" => Some("♀"),
+        "sun" => Some("☀"),
+        "moon" => Some("☾"),
+        "cloud" => Some("☁"),
+        "music" => Some("♪"),
+        "phone" => Some("☎"),
+        "email" | "mail" => Some("✉"),
+        "warn" => Some("⚠"),
+        "info" => Some("ℹ"),
+        _ => None,
+    }
+}
+
+/// Expand `u`-mode remainder into symbol candidates (exact + prefix matches).
+fn expand_u_input(rest: &str) -> Vec<Candidate> {
+    let rest = rest.trim().to_ascii_lowercase();
+    if rest.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    if let Some(sym) = u_symbol(&rest) {
+        out.push(Candidate::new(sym, 20.0));
+    }
+    // Prefix suggestions from a fixed code list
+    const CODES: &[&str] = &[
+        "heart", "star", "smile", "arrow", "left", "up", "down", "check", "cross", "dot", "degree",
+        "celsius", "euro", "pound", "yen", "yuan", "copy", "tm", "reg", "infty", "neq", "leq",
+        "geq", "pm", "times", "divide", "section", "bullet", "ellipsis", "dash", "square",
+        "circle", "diamond", "spade", "club", "music", "phone", "email", "warn",
+    ];
+    for code in CODES {
+        if code.starts_with(&rest) && *code != rest.as_str() {
+            if let Some(sym) = u_symbol(code) {
+                out.push(Candidate::new(sym, 5.0));
+            }
+        }
+        if out.len() >= 8 {
+            break;
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|c| seen.insert(c.text.clone()));
+    out.truncate(8);
+    out
 }

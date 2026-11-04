@@ -71,7 +71,7 @@ fn forget_word_hides_candidate() {
 #[test]
 fn forget_mask_persists_across_userdict_reopen() {
     let ud = std::env::temp_dir().join(format!(
-        "libchinese-forget-reopen-{}-{}.redb",
+        "libpinyin-forget-reopen-{}-{}.redb",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

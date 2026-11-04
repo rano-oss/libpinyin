@@ -13,8 +13,6 @@
 // - Once we import upstream generated tables (parser table + distances) we can
 //   expand tests to exercise subtle distance-based tie-breakers.
 //
-// File: libchinese/libpinyin/tests/ported_parser_vectors.rs
-
 use libpinyin::Parser;
 
 fn texts_from_seg(seg: Vec<libpinyin::Syllable>) -> Vec<String> {

@@ -43,7 +43,7 @@ pub fn lock_engine_tests() -> MutexGuard<'static, ()> {
 /// Call [`lock_engine_tests`] first when multiple tests in the same binary open engines.
 pub fn isolate_userdict(prefix: &str) {
     let ud = std::env::temp_dir().join(format!(
-        "libchinese-{prefix}-userdict-{}-{}.redb",
+        "libpinyin-{prefix}-userdict-{}-{}.redb",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

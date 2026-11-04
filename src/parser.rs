@@ -1,4 +1,3 @@
-// libchinese/libpinyin/src/parser.rs
 //
 // Pinyin parser for syllable segmentation.
 // - DP-based segmentation with beam search (segment_top_k)

@@ -317,7 +317,7 @@ impl Engine {
         let purpose = self.input_purpose;
         if self.model.config.learning_enabled && !purpose.disables_learning() {
             if let Err(e) = self.model.userdict.learn_with_count(phrase, 1) {
-                eprintln!("libchinese: learn failed: {e}");
+                eprintln!("libpinyin: learn failed: {e}");
             }
         }
         self.clear_cache();
@@ -330,7 +330,7 @@ impl Engine {
 
     pub fn clear_masked_phrases(&mut self) {
         if let Err(e) = self.model.userdict.clear_masked() {
-            eprintln!("libchinese: clear_masked failed: {e}");
+            eprintln!("libpinyin: clear_masked failed: {e}");
         }
         self.model.config.masked_phrases.clear();
         self.clear_cache();
@@ -345,7 +345,7 @@ impl Engine {
             return;
         }
         if let Err(e) = self.model.userdict.forget_phrase(phrase) {
-            eprintln!("libchinese: forget_phrase failed: {e}");
+            eprintln!("libpinyin: forget_phrase failed: {e}");
         }
         self.model.config.masked_phrases.insert(phrase.to_string());
         self.clear_cache();
@@ -357,7 +357,7 @@ impl Engine {
             return;
         }
         if let Err(e) = self.model.userdict.unmask_phrase(phrase) {
-            eprintln!("libchinese: unmask_phrase failed: {e}");
+            eprintln!("libpinyin: unmask_phrase failed: {e}");
         }
         self.model.config.masked_phrases.remove(phrase);
         self.clear_cache();
@@ -369,7 +369,7 @@ impl Engine {
             return;
         }
         if let Err(e) = self.model.userdict.mask_phrase(phrase) {
-            eprintln!("libchinese: mask_phrase failed: {e}");
+            eprintln!("libpinyin: mask_phrase failed: {e}");
         }
         self.model.config.masked_phrases.insert(phrase.to_string());
         self.clear_cache();

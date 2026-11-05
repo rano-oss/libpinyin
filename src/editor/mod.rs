@@ -8,7 +8,7 @@ mod options;
 
 pub use crate::model::CharacterForm;
 pub use modes::{preferred_chinese_punct, to_fullwidth};
-pub use options::{EditorOptions, HostKnobs};
+pub use options::EditorOptions;
 
 use crate::context::{Context, InputPurpose};
 use crate::engine::Engine;

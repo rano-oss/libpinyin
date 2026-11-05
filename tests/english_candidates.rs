@@ -1,13 +1,12 @@
-//! English mixed-input: dict lookup + engine appends extras after phonetic results.
+//! English mixed-input via public [`Engine`] API.
 
 mod common;
 
-use common::{data_dir, isolate_userdict};
-use libpinyin::english::EnglishDict;
-use std::path::PathBuf;
+use common::{data_dir, isolate_userdict, lock_engine_tests};
 
 #[test]
 fn loads_english_wordlist_from_aux_dirs() {
+    let _lock = lock_engine_tests();
     isolate_userdict("english-engine");
     let mut engine = libpinyin::Engine::from_data_dir(data_dir()).expect("load engine");
     engine.set_english_enabled(true);
@@ -29,13 +28,4 @@ fn loads_english_wordlist_from_aux_dirs() {
         idx / page_size,
         &texts[..texts.len().min(page_size)]
     );
-}
-
-#[test]
-fn english_dict_prefix_from_vendored_wordlist() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/english.wordlist");
-    let dict = EnglishDict::from_file(&path).expect("wordlist");
-    assert!(!dict.is_empty());
-    let hits = dict.lookup_prefix("hel");
-    assert!(hits.iter().any(|(w, _)| *w == "hello"));
 }

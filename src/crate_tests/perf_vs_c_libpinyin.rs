@@ -11,13 +11,11 @@
 //! cargo test -p libpinyin --release --test perf_vs_c_libpinyin -- --ignored --nocapture --test-threads=1
 //! ```
 
-mod common;
-
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use common::{apply_c_compat, data_dir, isolate_userdict, load_engine, CLibPinyin};
+use super::common::{apply_c_compat, data_dir, isolate_userdict, load_engine, CLibPinyin};
 
 const C_USER_DIR: &str = "/tmp/libpinyin_perf_user";
 
@@ -491,7 +489,7 @@ fn perf_breakdown_cold() {
     let mut engine = load_engine();
     engine.configure(|c| c.allow_fuzzy = true);
     apply_c_compat(&mut engine);
-    let parser = libpinyin::parser::Parser::with_syllables(libpinyin::engine::PINYIN_SYLLABLES);
+    let parser = crate::parser::Parser::with_syllables(crate::engine::PINYIN_SYLLABLES);
     let rounds = 50usize;
     let mut seg_t = std::time::Duration::ZERO;
     let mut full_t = std::time::Duration::ZERO;

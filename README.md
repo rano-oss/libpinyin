@@ -10,7 +10,7 @@ Rust Pinyin input method engine: segmentation, candidates, double pinyin, mixed 
 
 ```toml
 # Cargo.toml
-libpinyin = "0.3"
+libpinyin = "0.4"
 # or: git = "https://github.com/rano-oss/libpinyin"
 ```
 
@@ -43,14 +43,14 @@ Expected artifacts: `lexicon.fst` / `lexicon.dat`, `word_bigram.dat` / `word_big
 | Item | Role |
 |---|---|
 | `Engine` | Lexicon load + `input()` candidates |
-| `Editor` | Key session; options via `EditorOptions` / `HostKnobs` |
+| `Editor` | Key session; options via `EditorOptions` |
 | `Context` | Preedit / candidates / commit snapshot after `process_key` |
 | `LanguageMode` | 中 / 英 |
 | `CharacterForm` | 半 / 全 |
 | `path` | Data / userdict discovery |
 | `editor::{preferred_chinese_punct, to_fullwidth}` | Host helpers for bypass paths |
 
-Advanced pieces (`parser`, `double_pinyin`, `lexicon`, …) live in submodules — see [docs.rs](https://docs.rs/libpinyin).
+Also public: `double_pinyin`, `userdict`, and `engine::{Lexicon, WordBigram}` — see [docs.rs](https://docs.rs/libpinyin).
 
 ## Building data files
 

@@ -8,12 +8,13 @@ use std::error::Error;
 
 use crate::emoji::EmojiDict;
 use crate::english::EnglishDict;
-use crate::lexicon::Lexicon;
 use crate::model::Model;
 use crate::parser::{Parser, Syllable};
 use crate::session::Candidate;
 use crate::userdict::UserDict;
-use crate::word_bigram::WordBigram;
+
+pub use crate::lexicon::Lexicon;
+pub use crate::word_bigram::WordBigram;
 
 /// All standard pinyin syllables (without tone markers).
 /// This list includes all valid pinyin syllables in Mandarin Chinese.
@@ -420,6 +421,27 @@ impl Engine {
     pub fn swap_word_bigram(&mut self, word_bigram: WordBigram) {
         self.model.swap_word_bigram(word_bigram);
         self.clear_cache();
+    }
+
+    /// Reload phrase lexicon + word bigram from a data directory (charset toggle).
+    ///
+    /// Expects the same layout as [`Self::from_data_dir`]: `lexicon.fst` /
+    /// `lexicon.dat` / `word_bigram.dat` / `word_bigram_words.fst`.
+    pub fn reload_phrase_data_from_dir<P: AsRef<std::path::Path>>(
+        &mut self,
+        data_dir: P,
+    ) -> Result<(), Box<dyn Error>> {
+        let data_dir = data_dir.as_ref();
+        let lexicon = Lexicon::load(&data_dir.join("lexicon.fst"), &data_dir.join("lexicon.dat"))
+            .map_err(|e| format!("failed to load lexicon from {:?}: {}", data_dir, e))?;
+        let word_bigram = WordBigram::load(
+            &data_dir.join("word_bigram.dat"),
+            &data_dir.join("word_bigram_words.fst"),
+        )
+        .map_err(|e| format!("failed to load word_bigram from {:?}: {}", data_dir, e))?;
+        self.swap_lexicon(lexicon);
+        self.swap_word_bigram(word_bigram);
+        Ok(())
     }
 
     /// Add an addon lexicon. Returns its index.

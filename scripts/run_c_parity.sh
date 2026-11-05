@@ -21,7 +21,7 @@ if [[ -z "${LIBPINYIN_LIB:-}" ]] && ! ldconfig -p 2>/dev/null | grep -q 'libpiny
   fi
 fi
 
-exec cargo test -p libpinyin \
-  --test compare_with_c_libpinyin \
-  --test parity_with_c_libpinyin \
+# C suites live under src/crate_tests (unit tests) so they can use pub(crate) parser/config.
+exec cargo test -p libpinyin --lib \
+  compare_with_c_libpinyin parity_with_c_libpinyin \
   -- --ignored --nocapture "$@"

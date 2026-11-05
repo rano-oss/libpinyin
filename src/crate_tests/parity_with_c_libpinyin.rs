@@ -32,11 +32,9 @@
 //! # or: ./scripts/run_c_parity.sh
 //! ```
 
-mod common;
-
 use std::collections::HashSet;
 
-use common::c_options::{
+use super::c_options::{
     self, PINYIN_AMB_ALL, PINYIN_AMB_AN_ANG, PINYIN_AMB_C_CH, PINYIN_AMB_EN_ENG, PINYIN_AMB_F_H,
     PINYIN_AMB_G_K, PINYIN_AMB_IN_ING, PINYIN_AMB_L_N, PINYIN_AMB_L_R, PINYIN_AMB_S_SH,
     PINYIN_AMB_Z_ZH, PINYIN_CORRECT_ALL, PINYIN_CORRECT_GN_NG, PINYIN_CORRECT_IOU_IU,
@@ -44,13 +42,13 @@ use common::c_options::{
     PINYIN_CORRECT_UE_VE, PINYIN_CORRECT_V_U, PINYIN_INCOMPLETE, PINYIN_OPTIONS_FULL,
     PINYIN_OPTIONS_STRICT,
 };
-use common::{
+use super::common::{
     apply_best_ux, apply_c_compat, isolate_userdict, load_engine, lock_engine_tests, CLibPinyin,
     CORE_CANDIDATE_INPUTS, LONG_SENTENCE_CASES, PROGRESSIVE_INPUTS, SMOKE_CANDIDATE_INPUTS,
     TEST_INPUTS,
 };
-use libpinyin::engine::PINYIN_SYLLABLES;
-use libpinyin::parser::Parser;
+use crate::engine::PINYIN_SYLLABLES;
+use crate::parser::Parser;
 
 const C_USER_DIR: &str = "/tmp/libpinyin_parity_user";
 

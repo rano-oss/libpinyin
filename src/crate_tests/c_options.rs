@@ -1,7 +1,7 @@
 //! Upstream libpinyin option bits (`pinyin_custom2.h`) for C↔Rust parity tests only.
 #![allow(dead_code)]
 
-use libpinyin::config::PinyinConfig;
+use crate::config::PinyinConfig;
 
 pub const IS_PINYIN: u32 = 1 << 1;
 pub const PINYIN_INCOMPLETE: u32 = 1 << 3;
@@ -39,9 +39,9 @@ pub const PINYIN_OPTIONS_STRICT: u32 = IS_PINYIN | USE_TONE;
 /// Build a [`PinyinConfig`] that mirrors upstream `pinyin_set_options` bits.
 pub fn from_c_options(options: u32) -> PinyinConfig {
     PinyinConfig {
-        base: libpinyin::Config {
+        base: crate::Config {
             fuzzy: fuzzy_rules_for_amb_options(options),
-            ..libpinyin::Config::default()
+            ..crate::Config::default()
         },
         pinyin_incomplete: options & PINYIN_INCOMPLETE != 0,
         correct_ue_ve: options & PINYIN_CORRECT_UE_VE != 0,

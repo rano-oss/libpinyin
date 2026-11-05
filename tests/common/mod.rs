@@ -3,7 +3,6 @@
 #![allow(dead_code, unused_imports)]
 
 pub mod c_libpinyin;
-pub mod c_options;
 pub mod corpus;
 
 pub use c_libpinyin::CLibPinyin;

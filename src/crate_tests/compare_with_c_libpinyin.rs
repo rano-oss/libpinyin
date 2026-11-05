@@ -24,15 +24,13 @@
 //! - Product UX bar (daily vocab / progressive / Best UX sentences) lives in
 //!   `product_quality.rs` — broad C overlap past ~95% is not a user requirement.
 
-mod common;
-
-use common::c_options::{self, PINYIN_OPTIONS_FULL, PINYIN_OPTIONS_STRICT};
-use common::{
+use super::c_options::{self, PINYIN_OPTIONS_FULL, PINYIN_OPTIONS_STRICT};
+use super::common::{
     apply_c_compat, isolate_userdict, load_engine, lock_engine_tests, CLibPinyin,
     CORE_CANDIDATE_INPUTS, PROGRESSIVE_INPUTS, TEST_INPUTS,
 };
-use libpinyin::engine::PINYIN_SYLLABLES;
-use libpinyin::parser::Parser;
+use crate::engine::PINYIN_SYLLABLES;
+use crate::parser::Parser;
 use std::collections::HashSet;
 
 const C_USER_DIR: &str = "/tmp/libpinyin_test_user";

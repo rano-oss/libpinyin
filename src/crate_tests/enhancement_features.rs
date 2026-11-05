@@ -1,16 +1,14 @@
-mod common;
-
 /// Tests for parser enhancement features:
 /// - Partial pinyin (incomplete syllables)
 /// - Pinyin corrections (ue/ve, v/u)
 ///
 /// These are unit tests for the parser correction methods,
 /// demonstrating the new enhancement features work correctly.
-use libpinyin::parser::Parser;
+use crate::parser::Parser;
 
 #[test]
 fn parser_find_syllable_completion_basic() {
-    use libpinyin::engine::PINYIN_SYLLABLES;
+    use crate::engine::PINYIN_SYLLABLES;
     let parser = Parser::with_syllables(PINYIN_SYLLABLES);
 
     let n = parser
@@ -275,9 +273,9 @@ fn parser_apply_corrections_iou_iu() {
 
 #[test]
 fn incomplete_zh_sh_segment_as_units() {
-    use common::c_options::{self, PINYIN_INCOMPLETE, PINYIN_OPTIONS_STRICT};
-    use libpinyin::engine::PINYIN_SYLLABLES;
-    use libpinyin::parser::Parser;
+    use super::c_options::{self, PINYIN_INCOMPLETE, PINYIN_OPTIONS_STRICT};
+    use crate::engine::PINYIN_SYLLABLES;
+    use crate::parser::Parser;
     let cfg = c_options::from_c_options(PINYIN_OPTIONS_STRICT | PINYIN_INCOMPLETE);
     let p = Parser::with_syllables_and_config(PINYIN_SYLLABLES, &cfg);
     assert!(p.find_syllable_completion("zh").is_some());

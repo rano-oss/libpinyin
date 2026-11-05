@@ -13,9 +13,9 @@
 // - Once we import upstream generated tables (parser table + distances) we can
 //   expand tests to exercise subtle distance-based tie-breakers.
 //
-use libpinyin::parser::Parser;
+use crate::parser::Parser;
 
-fn texts_from_seg(seg: Vec<libpinyin::parser::Syllable>) -> Vec<String> {
+fn texts_from_seg(seg: Vec<crate::parser::Syllable>) -> Vec<String> {
     seg.into_iter().map(|s| s.text).collect()
 }
 

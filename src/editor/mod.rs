@@ -29,7 +29,7 @@ pub enum KeyEvent {
     Left,
     /// Right arrow key
     Right,
-    /// Home — move preedit caret to start (fcitx/ibus).
+    /// Home — move preedit caret to start.
     Home,
     /// End — move preedit caret to end.
     End,
@@ -50,11 +50,11 @@ pub enum KeyEvent {
     /// Number key for candidate selection (1-9)
     Number(u8),
     /// 以词定字: take the N-th character (0-based) of the highlighted phrase.
-    /// Use `-1` for the last character (fcitx `]`).
+    /// Use `-1` for the last character (often bound to `]`).
     ChooseCharFromPhrase(i32),
-    /// Forget the highlighted candidate (fcitx Ctrl+7).
+    /// Forget the highlighted candidate (drop from user history).
     ForgetWord,
-    /// Pin highlighted candidate as a custom user phrase (fcitx Ctrl+8).
+    /// Pin highlighted candidate as a custom user phrase.
     PinPhrase,
     /// Tab: cycle Mandarin tone filter (Mac-style).
     Tab,
@@ -97,7 +97,7 @@ pub struct Editor {
     /// Context for platform communication
     pub context: ImeContext,
 
-    /// Durable English / Latin passthrough mode (ibus-libpinyin `modeChinese == false`).
+    /// Durable English / Latin passthrough mode.
     /// Survives composition `reset()` so Shift 中/英 stays sticky across focus clears.
     passthrough: bool,
 
@@ -143,7 +143,7 @@ impl Editor {
         self.punct_editor.reset();
         self.tone_filter = None;
         // Note: Don't reset suggestion_editor as it may be about to activate
-        // Note: passthrough survives — like ibus-libpinyin modeChinese across reset
+        // Note: passthrough survives across reset (sticky 中/英)
         if self.passthrough {
             self.session.mode = InputMode::Passthrough;
             self.context.auxiliary_text = "英".to_string();

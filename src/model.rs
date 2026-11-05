@@ -13,8 +13,7 @@ pub enum CandidateRankMode {
     /// Longer matched pinyin span first, then score (Best UX / product default).
     #[default]
     MatchedSpanThenScore,
-    /// Longer Chinese phrase first, then score (C `SORT_BY_PHRASE_LENGTH_AND_FREQUENCY`).
-    /// Use for C fidelity suites; short unigrams surface earlier.
+    /// Longer Chinese phrase first, then score. Short unigrams surface earlier.
     PhraseLengthThenScore,
 }
 
@@ -65,34 +64,30 @@ pub struct Config {
     /// Default: 10.0. Added to segment cost for unrecognized characters.
     pub unknown_cost: f32,
 
-    /// Lambda parameter for interpolation model (unigram/bigram mixing).
-    /// Upstream: `bigram_lambda = lambda`, `unigram_lambda = 1 - lambda`.
-    /// Default matches system `table.conf` (`lambda parameter: 0.312699`).
+    /// Lambda for unigram/bigram interpolation (`bigram_λ = lambda`).
+    /// Default `0.312699` matches common table.conf deployments.
     pub lambda: f32,
-    /// Upstream `LONG_SENTENCE_PENALTY = log(1.2)`.
-    /// Used when comparing trellis paths whose character lengths differ by 1,
-    /// not subtracted from every word score.
+    /// Penalty when comparing trellis paths whose character lengths differ by 1
+    /// (`log(1.2)` by default). Not subtracted from every word score.
     pub sentence_length_penalty: f32,
-    /// Upstream `unigram_factor` (3 when learning): folds into phrase frequency as
+    /// Folds user learning into phrase frequency as
     /// `lexicon_freq + user_count * unigram_factor` before normalizing by total_freq.
     pub unigram_factor: f32,
     /// When double-pinyin is active, show raw typed keys in preedit instead of
     /// expanded syllables (e.g. `wd` vs `wo'de`).
     #[serde(default)]
     pub show_raw_double_pinyin: bool,
-    /// Emit the best multi-token DP sentence into the candidate list
-    /// (Best UX default: true). C fidelity suites disable this explicitly.
+    /// Emit the best multi-token DP sentence into the candidate list. Default: true.
     #[serde(default = "default_true")]
     pub emit_composed_sentences: bool,
-    /// Primary candidate ordering after score computation (Best UX: matched span).
-    /// C fidelity suites set `PhraseLengthThenScore` explicitly.
+    /// Primary candidate ordering after score computation. Default: matched span.
     #[serde(default)]
     pub candidate_rank_mode: CandidateRankMode,
-    /// 以词定字: `[` / `]` pick a character from the highlighted multi-char phrase
-    /// (fcitx/Mac-class). Default: true.
+    /// 以词定字: `[` / `]` pick a character from the highlighted multi-char phrase.
+    /// Default: true.
     #[serde(default = "default_true")]
     pub choose_char_from_phrase: bool,
-    /// Learn from commits (ibus `dynamic-adjust`, fcitx `Learning`). Default: true.
+    /// Learn from commits (update user dictionary / frequencies). Default: true.
     #[serde(default = "default_true")]
     pub learning_enabled: bool,
     /// Commit Chinese punctuation in 中 mode (Mac/Windows default). Default: true.
@@ -133,14 +128,10 @@ impl Default for Config {
             incomplete_penalty: 500,
             unknown_penalty: 1000,
             unknown_cost: 10.0,
-            // Lambda for interpolation: match libpinyin table.conf
             lambda: 0.312699,
-            // Upstream LONG_SENTENCE_PENALTY = log(1.2)
             sentence_length_penalty: 1.2_f32.ln(),
-            // Upstream unigram_factor when adding learned phrase frequency
             unigram_factor: 3.0,
             show_raw_double_pinyin: false,
-            // Best UX defaults (C-compat tests override explicitly)
             emit_composed_sentences: true,
             candidate_rank_mode: CandidateRankMode::MatchedSpanThenScore,
             choose_char_from_phrase: true,

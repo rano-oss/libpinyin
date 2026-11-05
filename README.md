@@ -1,12 +1,16 @@
 # libpinyin
 
+[![Crates.io](https://img.shields.io/crates/v/libpinyin.svg)](https://crates.io/crates/libpinyin)
+[![Docs.rs](https://docs.rs/libpinyin/badge.svg)](https://docs.rs/libpinyin)
+[![CI](https://github.com/rano-oss/libpinyin/actions/workflows/ci.yml/badge.svg)](https://github.com/rano-oss/libpinyin/actions/workflows/ci.yml)
+
 Rust Pinyin input method engine: segmentation, candidates, double pinyin, mixed English/emoji input, and IME session APIs (`Engine` + `Editor`).
 
 ## Install
 
 ```toml
 # Cargo.toml
-libpinyin = "0.1"
+libpinyin = "0.2"
 # or: git = "https://github.com/rano-oss/libpinyin"
 ```
 

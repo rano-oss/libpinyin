@@ -2,6 +2,7 @@
 **/target/
 **/*.redb
 *.fst
+!data/**/*.fst
 lcov.info
 .cargo/
 Cargo.lock

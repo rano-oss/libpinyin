@@ -23,7 +23,7 @@ pub struct Lexicon {
     fst_map: fst::Map<Mmap>,
     payload_mmap: Mmap,
     num_keys: u32,
-    /// Sum of all entry frequencies — upstream `get_phrase_index_total_freq()`.
+    /// Sum of all entry frequencies (normalizer for unigram probabilities).
     total_freq: u64,
 }
 

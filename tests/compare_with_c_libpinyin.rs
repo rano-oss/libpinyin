@@ -31,7 +31,8 @@ use common::{
     apply_c_compat, isolate_userdict, load_engine, lock_engine_tests, CLibPinyin,
     CORE_CANDIDATE_INPUTS, PROGRESSIVE_INPUTS, TEST_INPUTS,
 };
-use libpinyin::{Parser, PINYIN_SYLLABLES};
+use libpinyin::engine::PINYIN_SYLLABLES;
+use libpinyin::Parser;
 use std::collections::HashSet;
 
 const C_USER_DIR: &str = "/tmp/libpinyin_test_user";

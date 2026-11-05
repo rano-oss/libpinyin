@@ -42,18 +42,13 @@ impl Syllable {
 /// Parser providing segmentation using a trie and fuzzy rules.
 ///
 /// Public entrypoints:
-/// - `Parser::insert_syllable` to seed the trie
-/// - `Parser::segment_best` to obtain the best segmentation
-///
-/// Implementation notes:
-/// - The upstream
-///   `pinyin_parser2.cpp` uses table-driven parsing and DP tailored for
-///   pinyin syllable ambiguities. We will port the exact DP recurrence later.
+/// - [`Parser::insert_syllable`] to seed the trie
+/// - [`Parser::segment_best`] to obtain the best segmentation
 #[derive(Debug)]
 pub struct Parser {
     trie: TrieNode,
     fuzzy: FuzzyMap,
-    /// Mirrors upstream `PINYIN_INCOMPLETE`.
+    /// Allow incomplete syllable prefixes (e.g. `zh` → `zhong`).
     pinyin_incomplete: bool,
     correct_ue_ve: bool,
     correct_v_u: bool,
@@ -66,15 +61,14 @@ pub struct Parser {
 }
 
 impl Default for Parser {
-    /// Full (ibus-like) pinyin options enabled.
+    /// Full soft-match options from [`PinyinConfig::default`].
     fn default() -> Self {
         Self::from_pinyin_config(&PinyinConfig::default())
     }
 }
 
 impl Parser {
-    /// Build a parser whose soft-match behaviour mirrors `PinyinConfig` /
-    /// upstream `pinyin_set_options` bits.
+    /// Build a parser whose soft-match behaviour follows `PinyinConfig`.
     pub fn from_pinyin_config(cfg: &PinyinConfig) -> Self {
         Self {
             trie: TrieNode::default(),
@@ -212,18 +206,11 @@ impl Parser {
 
     /// Perform segmentation on `input` and return the single-best segmentation.
     ///
-    /// This implements a DP with tie-breaking rules inspired by upstream
-    /// `pinyin_parser2.cpp`:
-    ///  - Prefer lower total cost (primary).
-    ///  - On equal cost, prefer larger parsed length (more input covered by real syllables).
-    ///  - If parsed length equal, prefer fewer keys/segments.
-    ///  - If still equal, prefer smaller distance (we approximate with fuzzy usage / penalties).
+    /// Tie-breaking: lower total cost, then larger covered length, then fewer
+    /// segments, then lower fuzzy/correction distance.
     ///
-    /// Returns a vector of syllable strings (in order). Each syllable is a
-    /// normalized token (lowercase).
-    ///
-    /// For double pinyin support, use `segment_with_scheme` instead.
-    /// For custom penalty configuration, use `segment_best_with_config`.
+    /// Returns syllable tokens in order (lowercase). For double pinyin use
+    /// `segment_with_scheme`; for custom penalties use `segment_best_with_config`.
     pub fn segment_best(&self, input: &str, allow_fuzzy: bool) -> Vec<Syllable> {
         // Use default config penalties
         let config = crate::Config::default();
@@ -616,7 +603,7 @@ impl Parser {
     ///
     /// This implements a left-to-right beam search that expands exact trie
     /// Calculate the cost of a segment based on length, content, and fuzzy status.
-    /// This implements a more sophisticated cost model similar to upstream libpinyin.
+    /// Cost model for a candidate segment (length, rarity, fuzzy penalty).
     fn calculate_segment_cost(&self, segment: &str, length: usize, is_fuzzy: bool) -> f32 {
         let base_cost = 1.0_f32;
 

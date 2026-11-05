@@ -336,7 +336,7 @@ impl Engine {
         self.clear_cache();
     }
 
-    /// Forget a candidate phrase (fcitx Ctrl+7 / ibus-style remove from history).
+    /// Forget a candidate phrase (remove from user history / learning).
     ///
     /// Deletes any learned frequency, masks the phrase so it stays hidden, and
     /// clears the candidate cache.
@@ -414,7 +414,9 @@ impl Engine {
         self.clear_cache();
     }
 
-    /// Emit best multi-token DP sentence into candidates (default: false, C-compat).
+    /// Emit the best multi-token DP sentence into the candidate list.
+    ///
+    /// Default is on ([`crate::Config::emit_composed_sentences`]).
     pub fn set_emit_composed_sentences(&mut self, enabled: bool) {
         self.model.config.emit_composed_sentences = enabled;
         self.clear_cache();
@@ -426,7 +428,7 @@ impl Engine {
         self.clear_cache();
     }
 
-    /// Best full-coverage sentence for `input` (C `pinyin_get_sentence` role).
+    /// Best full-coverage sentence for `input`.
     ///
     /// Runs segment + sentence DP only — does not build the candidate bar
     /// (prefixes / full-key heads / rank / cache). Available even when
@@ -492,13 +494,9 @@ impl Engine {
 
     /// Generate candidates from a segmentation by trying all possible word combinations.
     ///
-    /// Uses dynamic programming to find valid word sequences that cover the entire segmentation.
-    /// Scoring follows upstream libpinyin `PhoneticLookup`:
-    /// - unigram_poss = phrase_freq / total_freq (phrase index)
-    /// - no context: log(unigram_poss * pinyin_poss * unigram_lambda)
-    /// - with context: log((λ·bigram + (1-λ)·unigram) * pinyin_poss)
-    /// - user learning folds into phrase_freq as count * unigram_factor
-    /// - LONG_SENTENCE_PENALTY used only when comparing paths of char-length ±1
+    /// Uses dynamic programming over word sequences that cover the segmentation.
+    /// Scores mix unigram / bigram probabilities with pinyin likelihood; user
+    /// learning folds into phrase frequency via `unigram_factor`.
     fn generate_candidates_from_segmentation(
         &self,
         seg: &[Syllable],
@@ -642,7 +640,7 @@ impl Engine {
         results
     }
 
-    /// Sentence DP only (C `guess_sentence` role). Returns `(text, score)`.
+    /// Sentence DP only. Returns `(text, score)`.
     fn compose_best_sentence(&self, seg: &[Syllable]) -> Option<String> {
         let n = seg.len();
         if n == 0 {
@@ -964,8 +962,7 @@ impl Engine {
 
     /// AMB variants for one syllable: initial swaps × final swaps.
     ///
-    /// C `fuzzy_syllable_step` puts all of these in the key matrix; e.g. `fan`
-    /// yields `han`, `fang`, and `hang` (f↔h and an↔ang together).
+    /// E.g. `fan` yields `han`, `fang`, and `hang` (f↔h and an↔ang together).
     fn amb_syllable_variants(syl: &str) -> Vec<(String, f32)> {
         let mut initials = vec![syl.to_string()];
         let push = |out: &mut Vec<String>, s: String| {

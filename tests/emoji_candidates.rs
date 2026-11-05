@@ -74,7 +74,7 @@ fn engine_bridges_pinyin_to_chinese_emoji_keyword() {
     let cands = engine.input("xin");
     let texts: Vec<_> = cands.iter().map(|c| c.text.as_str()).collect();
     assert!(
-        texts.iter().any(|t| *t == want.as_str()),
+        texts.contains(&want.as_str()),
         "expected {} (via 心) for xin, got {:?}",
         want,
         &texts[..texts.len().min(12)]

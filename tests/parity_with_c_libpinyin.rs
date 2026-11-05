@@ -49,7 +49,8 @@ use common::{
     CORE_CANDIDATE_INPUTS, LONG_SENTENCE_CASES, PROGRESSIVE_INPUTS, SMOKE_CANDIDATE_INPUTS,
     TEST_INPUTS,
 };
-use libpinyin::{Parser, PINYIN_SYLLABLES};
+use libpinyin::engine::PINYIN_SYLLABLES;
+use libpinyin::Parser;
 
 const C_USER_DIR: &str = "/tmp/libpinyin_parity_user";
 

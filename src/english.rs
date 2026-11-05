@@ -14,10 +14,10 @@ pub struct EnglishDict {
     entries: Vec<(String, f32)>,
 }
 
-/// Sensible default: ignore very short buffers (likely pure pinyin).
-pub const MINIMAL_ENGLISH_CHARACTERS: usize = 4;
+/// Ignore very short buffers (likely pure pinyin).
+const MINIMAL_ENGLISH_CHARACTERS: usize = 4;
 /// Cap English extras so they do not drown phonetic results.
-pub const MAXIMAL_ENGLISH_CANDIDATES: usize = 2;
+const MAXIMAL_ENGLISH_CANDIDATES: usize = 2;
 
 impl EnglishDict {
     /// Load from a wordlist file (`word\tfreq` per line).

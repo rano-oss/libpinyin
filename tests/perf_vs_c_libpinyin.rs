@@ -491,7 +491,7 @@ fn perf_breakdown_cold() {
     let mut engine = load_engine();
     engine.set_allow_fuzzy(true);
     apply_c_compat(&mut engine);
-    let parser = libpinyin::Parser::with_syllables(libpinyin::PINYIN_SYLLABLES);
+    let parser = libpinyin::Parser::with_syllables(libpinyin::engine::PINYIN_SYLLABLES);
     let rounds = 50usize;
     let mut seg_t = std::time::Duration::ZERO;
     let mut full_t = std::time::Duration::ZERO;

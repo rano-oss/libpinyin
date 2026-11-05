@@ -1,7 +1,6 @@
-//! Double Pinyin (Shuangpin 双拼) — tables aligned with upstream libpinyin
-//! `src/storage/double_pinyin_table.h`.
+//! Double Pinyin (Shuangpin 双拼) scheme tables.
 //!
-//! Schemes (same six as ibus-libpinyin):
+//! Built-in schemes:
 //! 1. Microsoft / MSPY
 //! 2. ZiRanMa / ZRM
 //! 3. ZiGuang / ZGPY
@@ -11,24 +10,24 @@
 
 use std::collections::HashMap;
 
-/// Double pinyin schemes supported by the parser (C `DoublePinyinScheme`).
+/// Double pinyin schemes supported by the parser.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DoublePinyinScheme {
-    /// Microsoft Shuangpin (微软双拼) — `DOUBLE_PINYIN_MS`
+    /// Microsoft Shuangpin (微软双拼)
     Microsoft,
-    /// ZiRanMa (自然码) — `DOUBLE_PINYIN_ZRM`
+    /// ZiRanMa (自然码)
     ZiRanMa,
-    /// ZiGuang (紫光) — `DOUBLE_PINYIN_ZIGUANG`
+    /// ZiGuang (紫光)
     ZiGuang,
-    /// ABC — `DOUBLE_PINYIN_ABC`
+    /// ABC
     ABC,
-    /// 拼音加加 — `DOUBLE_PINYIN_PYJJ`
+    /// 拼音加加
     PinyinJiaJia,
-    /// XiaoHe (小鹤) — `DOUBLE_PINYIN_XHE`
+    /// XiaoHe (小鹤)
     XiaoHe,
 }
 
-/// One or two finals for a yunmu key (C `m_yunmus[2]`).
+/// One or two finals for a yunmu key.
 #[derive(Debug, Clone, Copy)]
 pub struct YunmuChoice {
     pub primary: &'static str,
@@ -39,10 +38,10 @@ pub struct YunmuChoice {
 #[derive(Debug, Clone)]
 pub struct DoublePinyinSchemeData {
     pub name: &'static str,
-    /// Key → initial. Empty string = zero initial (`'` in C tables).
+    /// Key → initial. Empty string = zero initial.
     pub shengmu: HashMap<char, &'static str>,
     pub yunmu: HashMap<char, YunmuChoice>,
-    /// Exact 2-key fallbacks (C `double_pinyin_scheme_fallback_item_t`).
+    /// Exact 2-key fallbacks (irregular spellings).
     pub fallback: HashMap<&'static str, &'static str>,
 }
 
@@ -59,7 +58,7 @@ impl DoublePinyinScheme {
         }
     }
 
-    /// Parse scheme name (case-insensitive; accepts ibus short codes).
+    /// Parse scheme name (case-insensitive; accepts common short codes).
     pub fn parse(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
             "microsoft" | "mspy" | "ms" => Some(Self::Microsoft),
@@ -74,7 +73,7 @@ impl DoublePinyinScheme {
         }
     }
 
-    /// All built-in schemes in ibus display order.
+    /// All built-in schemes in a stable display order.
     pub fn all() -> &'static [Self] {
         &[
             Self::Microsoft,

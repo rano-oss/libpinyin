@@ -219,10 +219,9 @@ impl PhoneticEditor {
 
     /// 以词定字: commit one character from the highlighted multi-char phrase.
     ///
-    /// `char_index` is 0-based; `-1` means the last character (fcitx `]`).
-    /// Consumes the same pinyin span as selecting the whole phrase (fcitx
-    /// `selectCustom` behaviour) — useful when a rare character is easier to
-    /// find inside a common word.
+    /// `char_index` is 0-based; `-1` means the last character.
+    /// Consumes the same pinyin span as selecting the whole phrase — useful
+    /// when a rare character is easier to find inside a common word.
     fn handle_choose_char_from_phrase(
         &mut self,
         char_index: i32,

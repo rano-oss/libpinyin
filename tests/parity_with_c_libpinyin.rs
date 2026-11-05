@@ -50,7 +50,7 @@ use common::{
     TEST_INPUTS,
 };
 use libpinyin::engine::PINYIN_SYLLABLES;
-use libpinyin::Parser;
+use libpinyin::parser::Parser;
 
 const C_USER_DIR: &str = "/tmp/libpinyin_parity_user";
 
@@ -345,7 +345,7 @@ fn parity_candidates_and_beijing_top1() {
     apply_c_compat(&mut engine);
 
     c.set_options(PINYIN_OPTIONS_STRICT);
-    engine.set_allow_fuzzy(false);
+    engine.configure(|c| c.allow_fuzzy = false);
     let c_bj = c.candidates("beijing", 5);
     assert!(
         !c_bj.is_empty() && c_bj[0] == "北京",
@@ -376,7 +376,7 @@ fn parity_candidates_and_beijing_top1() {
         ("cand-full", PINYIN_OPTIONS_FULL, 1.0, 1.0, true),
     ] {
         c.set_options(options);
-        engine.set_allow_fuzzy(rust_fuzzy);
+        engine.configure(|c| c.allow_fuzzy = rust_fuzzy);
         let mut compared = 0usize;
         let mut top1 = 0usize;
         let mut overlap_sum = 0.0f64;
@@ -478,7 +478,7 @@ fn parity_candidates_broad_corpus() {
         ("broad-full", PINYIN_OPTIONS_FULL, 0.95, 0.90, true),
     ] {
         c.set_options(options);
-        engine.set_allow_fuzzy(rust_fuzzy);
+        engine.configure(|c| c.allow_fuzzy = rust_fuzzy);
         let mut compared = 0usize;
         let mut top1 = 0usize;
         let mut overlap_sum = 0.0f64;
@@ -631,7 +631,7 @@ fn parity_long_composed_sentences() {
         return;
     };
     let mut engine = load_engine();
-    engine.set_allow_fuzzy(true);
+    engine.configure(|c| c.allow_fuzzy = true);
     apply_best_ux(&mut engine);
     c.set_options(PINYIN_OPTIONS_FULL);
 

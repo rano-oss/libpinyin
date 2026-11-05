@@ -6,15 +6,23 @@
 mod modes;
 mod options;
 
-pub use modes::preferred_chinese_punct;
-pub use options::EditorOptions;
+pub use crate::model::CharacterForm;
+pub use modes::{preferred_chinese_punct, to_fullwidth};
+pub use options::{EditorOptions, HostKnobs};
 
-use crate::context::{ImeContext, InputPurpose};
+use crate::context::{Context, InputPurpose};
 use crate::engine::Engine;
-use crate::model::utils;
 use crate::session::{ImeSession, InputMode};
 use modes::{EditorResult, PhoneticEditor, PunctuationEditor, SuggestionEditor};
 use std::collections::HashMap;
+
+/// 中 / 英 language mode (sticky across composition reset).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LanguageMode {
+    #[default]
+    Chinese,
+    English,
+}
 
 /// Key event types that the IME can process.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,7 +68,7 @@ pub enum KeyEvent {
     Tab,
     /// Ctrl + character (e.g., Ctrl+period for punctuation toggle)
     Ctrl(char),
-    /// Shift lock toggle (for passthrough mode)
+    /// Shift lock toggle (中 / 英).
     ShiftLock,
 }
 
@@ -94,12 +102,11 @@ pub struct Editor {
     /// Session state
     pub session: ImeSession,
 
-    /// Context for platform communication
-    pub context: ImeContext,
+    /// Host-facing preedit / candidates / commit snapshot.
+    pub context: Context,
 
-    /// Durable English / Latin passthrough mode.
-    /// Survives composition `reset()` so Shift 中/英 stays sticky across focus clears.
-    passthrough: bool,
+    /// Durable 中/英 mode (survives composition `reset()`).
+    language_mode: LanguageMode,
 
     /// Last committed text (for in-composition predictions).
     last_commit: String,
@@ -120,8 +127,8 @@ impl Editor {
             punct_editor: PunctuationEditor::default(),
             suggestion_editor: SuggestionEditor::default(),
             session: ImeSession::with_page_size(5),
-            context: ImeContext::default(),
-            passthrough: false,
+            context: Context::default(),
+            language_mode: LanguageMode::Chinese,
             last_commit: String::new(),
             tone_filter: None,
             tone_map: ToneMap::default(),
@@ -135,38 +142,42 @@ impl Editor {
         ime
     }
 
-    /// Reset composition state. Passthrough (English) mode is preserved.
+    /// Reset composition state. Language mode (中/英) is preserved.
     pub fn reset(&mut self) {
         self.session.clear();
         self.context.clear();
         self.phonetic_editor.reset();
         self.punct_editor.reset();
         self.tone_filter = None;
-        // Note: Don't reset suggestion_editor as it may be about to activate
-        // Note: passthrough survives across reset (sticky 中/英)
-        if self.passthrough {
+        if self.language_mode == LanguageMode::English {
             self.session.mode = InputMode::Passthrough;
             self.context.auxiliary_text = "英".to_string();
         }
     }
 
-    /// Whether Latin/English passthrough is active (keys should not form pinyin).
-    pub fn is_passthrough(&self) -> bool {
-        self.passthrough
+    pub fn language_mode(&self) -> LanguageMode {
+        self.language_mode
     }
 
-    /// Enter or leave English passthrough. Clears any active composition.
-    pub fn set_passthrough(&mut self, enabled: bool) {
-        self.passthrough = enabled;
-        // Drop in-progress phonetic/punct/suggestion state.
+    /// Set 中/英. Clears any active composition.
+    pub fn set_language_mode(&mut self, mode: LanguageMode) {
+        self.language_mode = mode;
         self.session.clear();
         self.context.clear();
         self.phonetic_editor.reset();
         self.punct_editor.reset();
-        if enabled {
+        if mode == LanguageMode::English {
             self.session.mode = InputMode::Passthrough;
             self.context.auxiliary_text = "英".to_string();
         }
+    }
+
+    pub fn character_form(&self) -> CharacterForm {
+        self.engine.model.config.character_form
+    }
+
+    pub fn set_character_form(&mut self, form: CharacterForm) {
+        self.engine.model.config.character_form = form;
     }
 
     pub fn set_input_purpose(&mut self, purpose: InputPurpose) {
@@ -183,10 +194,23 @@ impl Editor {
         }
     }
 
+    fn toggle_language_mode(&mut self) {
+        let next = match self.language_mode {
+            LanguageMode::Chinese => LanguageMode::English,
+            LanguageMode::English => LanguageMode::Chinese,
+        };
+        self.set_language_mode(next);
+    }
+
+    fn apply_character_form(&self, text: String) -> String {
+        if self.engine.model.config.character_form == CharacterForm::Fullwidth {
+            to_fullwidth(&text)
+        } else {
+            text
+        }
+    }
+
     /// Maybe enter suggestion mode automatically after a commit.
-    ///
-    /// This checks configuration settings to determine if auto-suggestion
-    /// should be triggered based on the committed text.
     fn maybe_auto_suggest(&mut self, committed_text: &str) {
         // Skip if text is empty
         if committed_text.is_empty() {
@@ -230,7 +254,7 @@ impl Editor {
 
         if self.context.input_purpose.is_private() {
             if matches!(key, KeyEvent::ShiftLock) {
-                self.set_passthrough(!self.passthrough);
+                self.toggle_language_mode();
                 return KeyResult::Handled;
             }
             return KeyResult::NotHandled;
@@ -263,13 +287,11 @@ impl Editor {
         // Handle global shortcuts first (before mode routing)
         match key {
             KeyEvent::ShiftLock => {
-                self.set_passthrough(!self.passthrough);
+                self.toggle_language_mode();
                 return KeyResult::Handled;
             }
             KeyEvent::Ctrl('.') => {
-                // Ctrl+period: toggle punctuation mode
-                // But not in passthrough mode
-                if self.passthrough {
+                if self.language_mode == LanguageMode::English {
                     return KeyResult::NotHandled;
                 }
 
@@ -301,8 +323,7 @@ impl Editor {
             _ => {}
         }
 
-        // Passthrough mode: ignore all other keys (client types Latin directly)
-        if self.passthrough {
+        if self.language_mode == LanguageMode::English {
             return KeyResult::NotHandled;
         }
 
@@ -430,8 +451,7 @@ impl Editor {
                 }
             }
             InputMode::Passthrough => {
-                // Unreachable: passthrough handled before match
-                unreachable!("Passthrough mode should be handled before routing")
+                unreachable!("English mode is handled before routing")
             }
         };
 
@@ -444,57 +464,29 @@ impl Editor {
                 KeyResult::Handled
             }
             EditorResult::Commit(text) => {
-                // Apply full-width conversion if enabled
-                let text = if self.engine.model.config.full_width_enabled {
-                    utils::to_fullwidth(&text)
-                } else {
-                    text
-                };
-
-                // Commit but stay active
+                let text = self.apply_character_form(text);
                 if !text.is_empty() {
                     self.last_commit.push_str(&text);
                 }
                 self.context.commit_text = text.clone();
                 self.session.sync_to_context(&mut self.context);
                 self.update_auxiliary_text();
-
-                // Auto-enter suggestion mode if enabled and text meets criteria
                 self.maybe_auto_suggest(&text);
-
                 KeyResult::Handled
             }
             EditorResult::CommitAndReset(text) => {
-                // Apply full-width conversion if enabled
-                let text = if self.engine.model.config.full_width_enabled {
-                    utils::to_fullwidth(&text)
-                } else {
-                    text
-                };
-
-                // Commit and prepare for auto-suggestion
+                let text = self.apply_character_form(text);
                 let committed_text = text.clone();
                 if !text.is_empty() {
                     self.last_commit = text.clone();
                     self.context.commit_text = text;
                 }
                 self.reset();
-
-                // Auto-enter suggestion mode after reset if enabled
                 self.maybe_auto_suggest(&committed_text);
-
-                // No auxiliary text after reset (inactive)
                 KeyResult::Handled
             }
             EditorResult::CommitPartial(text, bytes_consumed) => {
-                // Apply full-width conversion if enabled
-                let text = if self.engine.model.config.full_width_enabled {
-                    utils::to_fullwidth(&text)
-                } else {
-                    text
-                };
-
-                // Commit the partial text
+                let text = self.apply_character_form(text);
                 if !text.is_empty() {
                     self.last_commit.push_str(&text);
                     self.context.commit_text = text;
@@ -523,9 +515,9 @@ impl Editor {
     }
 
     /// Compact status hints (tone filter, punctuation mode). Page numbers live
-    /// in [`ImeContext::page_text`] and are not overwritten here.
+    /// in [`Context::page_text`] and are not overwritten here.
     fn update_auxiliary_text(&mut self) {
-        if self.passthrough {
+        if self.language_mode == LanguageMode::English {
             self.context.auxiliary_text.clear();
             return;
         }

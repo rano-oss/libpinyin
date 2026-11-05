@@ -47,7 +47,7 @@ fn english_and_emoji_on_first_page_via_editor() {
     ime.reset();
     type_ascii(&mut ime, "smile");
     let page = &ime.context.candidates;
-    let want = libpinyin::EmojiDict::from_file(
+    let want = libpinyin::emoji::EmojiDict::from_file(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/emoji.table"),
     )
     .expect("emoji.table")

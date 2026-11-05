@@ -16,13 +16,13 @@ jobs:
       - name: Install Rust
         run: rustup update stable && rustup default stable
       - name: Check
-        run: cargo check --all-targets
+        run: cargo check -p libpinyin --all-targets && cargo check -p convert_table -p gen_word_bigrams
       - name: Test
-        run: cargo test --all-targets
+        run: cargo test -p libpinyin --all-targets
       - name: Clippy
         run: |
           rustup component add clippy
-          cargo clippy --all-targets -- -D warnings
+          cargo clippy -p libpinyin --all-targets -- -D warnings
       - name: Format
         run: |
           rustup component add rustfmt

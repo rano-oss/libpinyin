@@ -32,7 +32,7 @@ use common::{
     CORE_CANDIDATE_INPUTS, PROGRESSIVE_INPUTS, TEST_INPUTS,
 };
 use libpinyin::engine::PINYIN_SYLLABLES;
-use libpinyin::Parser;
+use libpinyin::parser::Parser;
 use std::collections::HashSet;
 
 const C_USER_DIR: &str = "/tmp/libpinyin_test_user";
@@ -274,7 +274,7 @@ fn compare_top_candidates_with_c_libpinyin() {
         ("cand-full-broad", PINYIN_OPTIONS_FULL, true, 0.95, 0.90),
     ] {
         c_lib.set_options(options);
-        engine.set_allow_fuzzy(fuzzy);
+        engine.configure(|c| c.allow_fuzzy = fuzzy);
         let mut compared = 0usize;
         let mut top1_matches = 0usize;
         let mut overlap_sum = 0.0f64;

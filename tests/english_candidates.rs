@@ -3,7 +3,7 @@
 mod common;
 
 use common::{data_dir, isolate_userdict};
-use libpinyin::EnglishDict;
+use libpinyin::english::EnglishDict;
 use std::path::PathBuf;
 
 #[test]

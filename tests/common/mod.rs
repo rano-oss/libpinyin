@@ -31,7 +31,7 @@ pub fn data_dir() -> PathBuf {
 
 static ENGINE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-/// Serialize `Engine::from_data_dir` tests: `LIBCHINESE_USERDICT` is process-global
+/// Serialize `Engine::from_data_dir` tests: userdict path is process-global
 /// and redb refuses a second open of the same path.
 pub fn lock_engine_tests() -> MutexGuard<'static, ()> {
     ENGINE_TEST_LOCK
@@ -51,7 +51,7 @@ pub fn isolate_userdict(prefix: &str) {
             .as_nanos()
     ));
     let _ = std::fs::remove_file(&ud);
-    std::env::set_var("LIBCHINESE_USERDICT", &ud);
+    std::env::set_var("LIBPINYIN_USERDICT", &ud);
 }
 
 /// Load engine with english/emoji off (product + C suites).
@@ -64,26 +64,30 @@ pub fn load_engine() -> libpinyin::Engine {
 
 /// Force C `guess_candidates` shape (parity / compare / perf).
 pub fn apply_c_compat(engine: &mut libpinyin::Engine) {
-    engine.set_emit_composed_sentences(false);
-    engine.set_candidate_rank_mode(CandidateRankMode::PhraseLengthThenScore);
+    engine.configure(|c| {
+        c.emit_composed_sentences = false;
+        c.candidate_rank_mode = CandidateRankMode::PhraseLengthThenScore;
+    });
 }
 
 /// Force Best UX candidate bar (sentence fold-in + span rank).
 pub fn apply_best_ux(engine: &mut libpinyin::Engine) {
-    engine.set_emit_composed_sentences(true);
-    engine.set_candidate_rank_mode(CandidateRankMode::MatchedSpanThenScore);
+    engine.configure(|c| {
+        c.emit_composed_sentences = true;
+        c.candidate_rank_mode = CandidateRankMode::MatchedSpanThenScore;
+    });
 }
 
 pub fn c_compat_engine() -> libpinyin::Engine {
     let mut engine = load_engine();
-    engine.set_allow_fuzzy(true);
+    engine.configure(|c| c.allow_fuzzy = true);
     apply_c_compat(&mut engine);
     engine
 }
 
 pub fn ux_engine() -> libpinyin::Engine {
     let mut engine = load_engine();
-    engine.set_allow_fuzzy(true);
+    engine.configure(|c| c.allow_fuzzy = true);
     apply_best_ux(&mut engine);
     engine
 }

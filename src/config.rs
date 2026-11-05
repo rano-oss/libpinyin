@@ -19,9 +19,6 @@ pub struct PinyinConfig {
     pub correct_iou_iu: bool,
     pub correct_uei_ui: bool,
     pub correct_on_ong: bool,
-
-    /// Double pinyin scheme (e.g. "Microsoft", "ZiRanMa", "XiaoHe")
-    pub double_pinyin_scheme: Option<String>,
 }
 
 impl Default for PinyinConfig {
@@ -41,7 +38,6 @@ impl Default for PinyinConfig {
             correct_iou_iu: true,
             correct_uei_ui: true,
             correct_on_ong: true,
-            double_pinyin_scheme: None,
         }
     }
 }

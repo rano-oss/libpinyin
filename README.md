@@ -10,21 +10,60 @@ Rust Pinyin input method engine: segmentation, candidates, double pinyin, mixed 
 
 ```toml
 # Cargo.toml
-libpinyin = "0.2"
+libpinyin = "0.3"
 # or: git = "https://github.com/rano-oss/libpinyin"
 ```
-
-Runtime lexicon files are **not** shipped in the crate. Point `Engine::from_data_dir` at a directory with `lexicon.fst` / `lexicon.dat` / word-bigram artifacts (and optionally `emoji.table`, `english.wordlist`). pinyinwl installs these under `/usr/share/libpinyin/data/`.
 
 ## Quick start
 
 ```rust
-use libpinyin::{Engine, KeyEvent};
+use libpinyin::{DataVariant, Engine, KeyEvent};
 
-let engine = Engine::from_data_dir("data/converted/simplified").unwrap();
+let engine = Engine::from_default_paths(DataVariant::Simplified).unwrap();
 let mut editor = engine.into_editor(9);
 editor.process_key(KeyEvent::Char('n'));
+// Read editor.context for preedit / candidates / commit_text
 ```
+
+Runtime lexicon files are **not** shipped on crates.io. Resolve them with:
+
+- `Engine::from_default_paths(DataVariant::…)` — search order in [`path`](https://docs.rs/libpinyin/latest/libpinyin/path/index.html)
+- or `Engine::from_data_dir("/path/to/dir")`
+
+Expected artifacts: `lexicon.fst` / `lexicon.dat`, `word_bigram.dat` / `word_bigram_words.fst`, optional `emoji.table` / `english.wordlist` / `addon/*/`.
+
+| Env | Purpose |
+|---|---|
+| `LIBPINYIN_DATA_DIR` | Exact data directory (skips search) |
+| `LIBPINYIN_USERDICT` | Path to `userdict.redb` |
+| `LIBPINYIN_DATADIR` | Build-time default system root (compile env) |
+
+## API sketch
+
+| Item | Role |
+|---|---|
+| `Engine` | Lexicon load + `input()` candidates |
+| `Editor` | Key session; options via `EditorOptions` / `HostKnobs` |
+| `Context` | Preedit / candidates / commit snapshot after `process_key` |
+| `LanguageMode` | 中 / 英 |
+| `CharacterForm` | 半 / 全 |
+| `path` | Data / userdict discovery |
+| `editor::{preferred_chinese_punct, to_fullwidth}` | Host helpers for bypass paths |
+
+Advanced pieces (`parser`, `double_pinyin`, `lexicon`, …) live in submodules — see [docs.rs](https://docs.rs/libpinyin).
+
+## Building data files
+
+Place upstream libpinyin tables under `data/` (and `data/zhuyin/`), then:
+
+```bash
+./scripts/build_data.sh
+# or:
+cargo run -p convert_table --release
+cargo run -p gen_word_bigrams --release -- data/interpolation2.text data/converted/simplified
+```
+
+Output goes to `data/converted/`. Convert tools are workspace members (`publish = false`).
 
 ## License
 

@@ -149,7 +149,7 @@ fn perf_compare_rust_vs_c() {
 
     let rust_data = data_dir();
     let mut engine = load_engine();
-    engine.set_allow_fuzzy(true);
+    engine.configure(|c| c.allow_fuzzy = true);
     apply_c_compat(&mut engine);
 
     // Warm both engines.
@@ -489,9 +489,9 @@ fn print_size_report(rust_data: &Path) {
 fn perf_breakdown_cold() {
     isolate_userdict("perf");
     let mut engine = load_engine();
-    engine.set_allow_fuzzy(true);
+    engine.configure(|c| c.allow_fuzzy = true);
     apply_c_compat(&mut engine);
-    let parser = libpinyin::Parser::with_syllables(libpinyin::engine::PINYIN_SYLLABLES);
+    let parser = libpinyin::parser::Parser::with_syllables(libpinyin::engine::PINYIN_SYLLABLES);
     let rounds = 50usize;
     let mut seg_t = std::time::Duration::ZERO;
     let mut full_t = std::time::Duration::ZERO;

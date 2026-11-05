@@ -1,7 +1,7 @@
 //! Upstream libpinyin option bits (`pinyin_custom2.h`) for C↔Rust parity tests only.
 #![allow(dead_code)]
 
-use libpinyin::PinyinConfig;
+use libpinyin::config::PinyinConfig;
 
 pub const IS_PINYIN: u32 = 1 << 1;
 pub const PINYIN_INCOMPLETE: u32 = 1 << 3;
@@ -52,7 +52,6 @@ pub fn from_c_options(options: u32) -> PinyinConfig {
         correct_iou_iu: options & PINYIN_CORRECT_IOU_IU != 0,
         correct_uei_ui: options & PINYIN_CORRECT_UEI_UI != 0,
         correct_on_ong: options & PINYIN_CORRECT_ON_ONG != 0,
-        double_pinyin_scheme: None,
     }
 }
 

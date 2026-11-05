@@ -6,7 +6,7 @@
 
 use std::ops::Range;
 
-use crate::context::ImeContext;
+use crate::context::Context;
 
 /// Current input mode of the IME session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -77,11 +77,8 @@ impl ImeSession {
         self.composition = Composition::from_text(input_text);
     }
 
-    /// Sync session state to an ImeContext for platform communication.
-    ///
-    /// This method reads the session state and populates the ImeContext
-    /// fields so the platform can display the IME UI.
-    pub fn sync_to_context(&self, context: &mut ImeContext) {
+    /// Sync session state into a host [`Context`].
+    pub fn sync_to_context(&self, context: &mut Context) {
         // Clear previous state
         context.preedit_text.clear();
         context.candidates.clear();
@@ -109,10 +106,8 @@ impl ImeSession {
         }
     }
 
-    /// Update session state from an ImeContext.
-    ///
-    /// This is less common but allows the platform to inject state if needed.
-    pub fn sync_from_context(&mut self, context: &ImeContext) {
+    /// Update session state from a host [`Context`] (rarely needed).
+    pub fn sync_from_context(&mut self, context: &Context) {
         // Update composition
         if !context.preedit_text.is_empty() {
             self.composition =

@@ -11,7 +11,7 @@ use libpinyin::CandidateRankMode;
 fn composed_sentences_and_rank_options() {
     isolate_userdict("composed");
     let mut engine = load_engine();
-    engine.set_allow_fuzzy(true);
+    engine.configure(|c| c.allow_fuzzy = true);
     apply_best_ux(&mut engine);
 
     // woshinuoweiren → 我是挪威人 (C pinyin_get_sentence parity)
@@ -45,7 +45,7 @@ fn composed_sentences_and_rank_options() {
     }
 
     // Option off: suppress composed sentence
-    engine.set_emit_composed_sentences(false);
+    engine.configure(|c| c.emit_composed_sentences = false);
     let tops: Vec<_> = engine
         .input("woshinuoweiren")
         .into_iter()
@@ -56,13 +56,13 @@ fn composed_sentences_and_rank_options() {
         !tops.iter().any(|t| t == "我是挪威人"),
         "composed sentence should be suppressed when option is off, got {tops:?}"
     );
-    engine.set_emit_composed_sentences(true);
+    engine.configure(|c| c.emit_composed_sentences = true);
 
     // Phrase-length rank prefers Chinese char length (C SORT_BY_PHRASE_LENGTH).
-    engine.set_allow_fuzzy(false);
-    engine.set_emit_composed_sentences(false);
+    engine.configure(|c| c.allow_fuzzy = false);
+    engine.configure(|c| c.emit_composed_sentences = false);
 
-    engine.set_candidate_rank_mode(CandidateRankMode::MatchedSpanThenScore);
+    engine.configure(|c| c.candidate_rank_mode = CandidateRankMode::MatchedSpanThenScore);
     let span_tops: Vec<_> = engine
         .input("beijing")
         .into_iter()
@@ -70,7 +70,7 @@ fn composed_sentences_and_rank_options() {
         .map(|c| c.text)
         .collect();
 
-    engine.set_candidate_rank_mode(CandidateRankMode::PhraseLengthThenScore);
+    engine.configure(|c| c.candidate_rank_mode = CandidateRankMode::PhraseLengthThenScore);
     let phrase_tops: Vec<_> = engine
         .input("beijing")
         .into_iter()
@@ -109,8 +109,8 @@ fn composed_sentences_and_rank_options() {
     );
 
     // UX knobs: sentences in the bar + span ranking.
-    engine.set_emit_composed_sentences(true);
-    engine.set_candidate_rank_mode(CandidateRankMode::MatchedSpanThenScore);
+    engine.configure(|c| c.emit_composed_sentences = true);
+    engine.configure(|c| c.candidate_rank_mode = CandidateRankMode::MatchedSpanThenScore);
     assert!(engine.model.config.emit_composed_sentences);
     assert_eq!(
         engine.model.config.candidate_rank_mode,

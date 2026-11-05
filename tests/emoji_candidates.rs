@@ -3,7 +3,7 @@
 mod common;
 
 use common::{data_dir, isolate_userdict, lock_engine_tests};
-use libpinyin::EmojiDict;
+use libpinyin::emoji::EmojiDict;
 use std::path::PathBuf;
 
 fn emoji_table() -> PathBuf {

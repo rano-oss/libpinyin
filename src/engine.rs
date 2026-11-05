@@ -6,8 +6,14 @@
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 
+use crate::emoji::EmojiDict;
+use crate::english::EnglishDict;
+use crate::lexicon::Lexicon;
+use crate::model::Model;
 use crate::parser::{Parser, Syllable};
-use crate::{Candidate, EmojiDict, EnglishDict, Lexicon, Model, UserDict, WordBigram};
+use crate::session::Candidate;
+use crate::userdict::UserDict;
+use crate::word_bigram::WordBigram;
 
 /// All standard pinyin syllables (without tone markers).
 /// This list includes all valid pinyin syllables in Mandarin Chinese.
@@ -51,8 +57,7 @@ pub const PINYIN_SYLLABLES: &[&str] = &[
 /// Note: Fuzzy matching is handled by the parser during segmentation. The engine
 /// works with the segmentations provided by the parser.
 ///
-/// Plain-assignment fields are `pub`. Prefer the `set_*` methods for options that
-/// affect cached results (`emoji_enabled`, `allow_fuzzy`, …): they also clear the cache.
+/// Conversion engine. Mutate [`Model::config`] via [`Self::configure`] (clears cache).
 pub struct Engine {
     pub model: Model,
     pub parser: Parser,
@@ -64,14 +69,7 @@ pub struct Engine {
     pub emoji_enabled: bool,
     english_dict: Option<EnglishDict>,
     pub english_enabled: bool,
-    /// When true, prefer candidates whose matching key/syllable span is shorter.
-    pub sort_by_pinyin_length: bool,
-    /// When true, parser may apply fuzzy AMB / corrections / incomplete.
-    pub allow_fuzzy: bool,
-    /// Optional double-pinyin scheme name forwarded to parsers that support it.
-    pub double_pinyin_scheme: Option<String>,
-    /// Additional addon dictionaries (topic-specific)
-    addon_lexicons: Vec<(String, crate::Lexicon, bool)>,
+    addon_lexicons: Vec<(String, Lexicon, bool)>,
     pub input_purpose: crate::InputPurpose,
 }
 
@@ -105,12 +103,15 @@ impl Engine {
             emoji_enabled: false,
             english_dict: None,
             english_enabled: false,
-            sort_by_pinyin_length: false,
-            allow_fuzzy: true,
-            double_pinyin_scheme: None,
             addon_lexicons: Vec::new(),
             input_purpose: crate::InputPurpose::FreeForm,
         }
+    }
+
+    /// Mutate [`Config`](crate::Config) and clear the candidate cache.
+    pub fn configure(&mut self, f: impl FnOnce(&mut crate::Config)) {
+        f(&mut self.model.config);
+        self.clear_cache();
     }
 
     /// Process input and return ranked candidates.
@@ -135,9 +136,9 @@ impl Engine {
         self.cache_misses += 1;
 
         // C uses one parse. `segment_top_k(..., 1)` routes to `segment_best`.
-        let allow_fuzzy = self.allow_fuzzy;
+        let allow_fuzzy = self.model.config.allow_fuzzy;
         let segs = {
-            let scheme = &self.double_pinyin_scheme;
+            let scheme = &self.model.config.double_pinyin_scheme;
             self.parser
                 .segment_top_k_with_scheme(input, 1, allow_fuzzy, scheme.as_deref())
         };
@@ -228,7 +229,7 @@ impl Engine {
         vec.sort_by(rank);
 
         // Optional: when sort_by_pinyin_length is on, prefer fewer chars among near-ties.
-        if self.sort_by_pinyin_length {
+        if self.model.config.sort_by_pinyin_length {
             vec.sort_by(|a, b| {
                 let score_cmp = b
                     .score
@@ -380,74 +381,33 @@ impl Engine {
         self.model.config.masked_phrases.contains(phrase) || self.model.userdict.is_masked(phrase)
     }
 
-    /// Set the emoji dictionary for this engine.
     pub fn set_emoji_dict(&mut self, dict: EmojiDict) {
         self.emoji_dict = Some(dict);
     }
 
-    /// Enable or disable emoji candidates in results.
     pub fn set_emoji_enabled(&mut self, enabled: bool) {
         self.emoji_enabled = enabled;
         self.clear_cache();
     }
 
-    /// Set the English word dictionary for mixed-input candidates.
     pub fn set_english_dict(&mut self, dict: EnglishDict) {
         self.english_dict = Some(dict);
     }
 
-    /// Enable or disable English word candidates.
     pub fn set_english_enabled(&mut self, enabled: bool) {
         self.english_enabled = enabled;
         self.clear_cache();
     }
 
-    /// Enable or disable parser fuzzy AMB / corrections / incomplete matching.
-    pub fn set_allow_fuzzy(&mut self, enabled: bool) {
-        self.allow_fuzzy = enabled;
-        self.clear_cache();
-    }
-
-    /// Prefer shorter candidates when scores are close.
-    pub fn set_sort_by_pinyin_length(&mut self, enabled: bool) {
-        self.sort_by_pinyin_length = enabled;
-        self.clear_cache();
-    }
-
-    /// Emit the best multi-token DP sentence into the candidate list.
-    ///
-    /// Default is on ([`crate::Config::emit_composed_sentences`]).
-    pub fn set_emit_composed_sentences(&mut self, enabled: bool) {
-        self.model.config.emit_composed_sentences = enabled;
-        self.clear_cache();
-    }
-
-    /// Candidate bar ordering (matched pinyin span vs Chinese phrase length).
-    pub fn set_candidate_rank_mode(&mut self, mode: crate::CandidateRankMode) {
-        self.model.config.candidate_rank_mode = mode;
-        self.clear_cache();
-    }
-
-    /// Best full-coverage sentence for `input`.
-    ///
-    /// Runs segment + sentence DP only — does not build the candidate bar
-    /// (prefixes / full-key heads / rank / cache). Available even when
-    /// [`crate::Config::emit_composed_sentences`] is false.
+    /// Best full-coverage sentence for `input` (segment + sentence DP only).
     pub fn best_sentence(&self, input: &str) -> Option<String> {
-        let allow_fuzzy = self.allow_fuzzy;
-        let segs = {
-            let scheme = &self.double_pinyin_scheme;
-            self.parser
-                .segment_top_k_with_scheme(input, 1, allow_fuzzy, scheme.as_deref())
-        };
+        let allow_fuzzy = self.model.config.allow_fuzzy;
+        let scheme = self.model.config.double_pinyin_scheme.clone();
+        let segs = self
+            .parser
+            .segment_top_k_with_scheme(input, 1, allow_fuzzy, scheme.as_deref());
         let seg = segs.first()?;
         self.compose_best_sentence(seg)
-    }
-
-    /// Optional double-pinyin scheme (`Microsoft`, `ZiRanMa`, …). `None` = full pinyin.
-    pub fn set_double_pinyin_scheme(&mut self, scheme: Option<String>) {
-        self.double_pinyin_scheme = scheme;
-        self.clear_cache();
     }
 
     /// Swap the lexicon (e.g., for simplified/traditional toggle). Clears cache.
@@ -510,7 +470,7 @@ impl Engine {
         let mut results: Vec<Candidate> = Vec::with_capacity(48);
         let mut seen: HashSet<String> = HashSet::with_capacity(64);
         let seg_pinyin_poss = Self::pinyin_poss_for_span(seg);
-        let allow_fuzzy = self.allow_fuzzy;
+        let allow_fuzzy = self.model.config.allow_fuzzy;
         let (lambda, unigram_factor, sentence_length_penalty, emit_sentences, total_freq) = {
             let cfg = &self.model.config;
             let lex = &self.model.lexicon;
@@ -646,7 +606,7 @@ impl Engine {
         if n == 0 {
             return None;
         }
-        let allow_fuzzy = self.allow_fuzzy;
+        let allow_fuzzy = self.model.config.allow_fuzzy;
         let (lambda, unigram_factor, sentence_length_penalty, total_freq) = {
             let cfg = &self.model.config;
             let lex = &self.model.lexicon;
@@ -1117,8 +1077,8 @@ impl Engine {
             return (String::new(), 0);
         }
         let segs = {
-            let scheme = &self.double_pinyin_scheme;
-            let allow_fuzzy = self.allow_fuzzy;
+            let scheme = &self.model.config.double_pinyin_scheme;
+            let allow_fuzzy = self.model.config.allow_fuzzy;
             self.parser
                 .segment_top_k_with_scheme(input, 1, allow_fuzzy, scheme.as_deref())
         };
@@ -1144,144 +1104,113 @@ impl Engine {
         (input.to_string(), input_cursor)
     }
 
+    /// Load from the first directory found by [`crate::path::find_data_dir`].
+    pub fn from_default_paths(variant: crate::DataVariant) -> Result<Self, Box<dyn Error>> {
+        let dir = crate::path::find_data_dir(variant).ok_or_else(|| {
+            format!(
+                "no libpinyin data dir for {:?} (searched {:?})",
+                variant,
+                crate::path::data_search_paths(variant)
+            )
+        })?;
+        Self::from_data_dir(dir)
+    }
+
     /// Load an engine from a model directory containing runtime artifacts.
     ///
     /// Expected layout (data-dir):
-    ///  - lexicon.fst + lexicon.dat        (mmap lexicon)
-    ///  - word_bigram.dat + word_bigram_words.fst  (mmap word bigram)
-    ///  - userdict.redb                    (persistent user dictionary)
+    ///  - lexicon.fst + lexicon.dat
+    ///  - word_bigram.dat + word_bigram_words.fst
+    ///  - userdict via [`crate::path::userdict_path`], or `<data_dir>/userdict.redb`
+    ///    when `LIBPINYIN_DATA_DIR` is set
     pub fn from_data_dir<P: AsRef<std::path::Path>>(data_dir: P) -> Result<Self, Box<dyn Error>> {
         let data_dir = data_dir.as_ref();
 
-        // Load lexicon (mmap)
-        let fst_path = data_dir.join("lexicon.fst");
-        let dat_path = data_dir.join("lexicon.dat");
-        let lexicon = Lexicon::load(&fst_path, &dat_path)
+        let lexicon = Lexicon::load(&data_dir.join("lexicon.fst"), &data_dir.join("lexicon.dat"))
             .map_err(|e| format!("failed to load lexicon from {:?}: {}", data_dir, e))?;
 
-        // Load word bigram (mmap)
-        let wb_dat_path = data_dir.join("word_bigram.dat");
-        let wb_fst_path = data_dir.join("word_bigram_words.fst");
-        let word_bigram = WordBigram::load(&wb_dat_path, &wb_fst_path)
-            .map_err(|e| format!("failed to load word_bigram from {:?}: {}", data_dir, e))?;
+        let word_bigram = WordBigram::load(
+            &data_dir.join("word_bigram.dat"),
+            &data_dir.join("word_bigram_words.fst"),
+        )
+        .map_err(|e| format!("failed to load word_bigram from {:?}: {}", data_dir, e))?;
 
-        // Userdict: `LIBCHINESE_USERDICT` override (tests / nested), else beside an
-        // explicit `PINYINWL_DATA_DIR` so a private lexicon copy does not still fight
-        // the host lock on ~/.pinyin/userdict.redb, else ~/.pinyin/userdict.redb.
-        let userdict = {
-            let ud_path = if let Ok(p) = std::env::var("LIBCHINESE_USERDICT") {
-                std::path::PathBuf::from(p)
-            } else if std::env::var_os("PINYINWL_DATA_DIR").is_some() {
-                data_dir.join("userdict.redb")
-            } else {
-                let home = std::env::var("HOME")
-                    .or_else(|_| std::env::var("USERPROFILE"))
-                    .unwrap_or_else(|_| ".".to_string());
-                std::path::PathBuf::from(home)
-                    .join(".pinyin")
-                    .join("userdict.redb")
-            };
-
-            if let Some(parent) = ud_path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-
-            UserDict::new(&ud_path)?
+        // Beside an explicit data-dir env so a private lexicon copy does not
+        // still fight the host lock on ~/.pinyin/userdict.redb.
+        let ud_path = if crate::path::data_dir_from_env().is_some() {
+            data_dir.join("userdict.redb")
+        } else {
+            crate::path::userdict_path()
         };
+        if let Some(parent) = ud_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let userdict = UserDict::new(&ud_path)?;
 
         let model = Model::new(lexicon, word_bigram, userdict, crate::Config::default());
-
-        // Aux tables may live beside the lexicon (installed simplified/), in the
-        // parent data/ dir, or in the source-tree grandparent (converted/simplified
-        // → data/). Also check the user-local share path so English can be
-        // installed without writing to /usr.
-        let mut aux_dirs = vec![data_dir.to_path_buf()];
-        if let Some(parent) = data_dir.parent() {
-            aux_dirs.push(parent.to_path_buf());
-            if let Some(grandparent) = parent.parent() {
-                aux_dirs.push(grandparent.to_path_buf());
-            }
-        }
-        if let Ok(home) = std::env::var("HOME") {
-            let local = std::path::PathBuf::from(home).join(".local/share/libpinyin/data");
-            aux_dirs.push(local.join("simplified"));
-            aux_dirs.push(local.join("traditional"));
-            aux_dirs.push(local);
-        }
-        // Dedup while preserving order
-        {
-            let mut seen = std::collections::HashSet::new();
-            aux_dirs.retain(|d| seen.insert(d.clone()));
-        }
-
         let mut engine = Self::new(model);
+        engine.load_aux_tables(data_dir);
+        engine.load_addon_lexicons(data_dir);
+        Ok(engine)
+    }
 
-        let mut emoji_loaded = false;
-        for dir in &aux_dirs {
-            let emoji_path = dir.join("emoji.table");
-            if emoji_path.exists() {
-                if let Ok(emoji_dict) = EmojiDict::from_file(&emoji_path) {
-                    log::info!("Loaded emoji dictionary with {} entries", emoji_dict.len());
-                    engine.set_emoji_dict(emoji_dict);
-                    emoji_loaded = true;
-                    break;
+    fn load_aux_tables(&mut self, data_dir: &std::path::Path) {
+        match crate::path::find_aux_file(data_dir, "emoji.table") {
+            Some(path) => match EmojiDict::from_file(&path) {
+                Ok(dict) => {
+                    log::info!("Loaded emoji dictionary with {} entries", dict.len());
+                    self.set_emoji_dict(dict);
                 }
-            }
-        }
-        if !emoji_loaded {
-            log::warn!(
-                "emoji.table not found beside {:?}; emoji candidates will be unavailable",
+                Err(e) => log::warn!("failed to load emoji.table from {:?}: {}", path, e),
+            },
+            None => log::warn!(
+                "emoji.table not found beside {:?}; emoji candidates unavailable",
                 data_dir
-            );
+            ),
         }
-        let mut english_loaded = false;
-        for dir in &aux_dirs {
-            let english_path = dir.join("english.wordlist");
-            if english_path.exists() {
-                if let Ok(english_dict) = EnglishDict::from_file(&english_path) {
+        match crate::path::find_aux_file(data_dir, "english.wordlist") {
+            Some(path) => match EnglishDict::from_file(&path) {
+                Ok(dict) => {
                     log::info!(
                         "Loaded English dictionary with {} entries from {:?}",
-                        english_dict.len(),
-                        english_path
+                        dict.len(),
+                        path
                     );
-                    engine.set_english_dict(english_dict);
-                    english_loaded = true;
-                    break;
+                    self.set_english_dict(dict);
                 }
-            }
-        }
-        if !english_loaded {
-            log::warn!(
-                "english.wordlist not found beside {:?}; English mixed-input will be unavailable",
+                Err(e) => log::warn!("failed to load english.wordlist from {:?}: {}", path, e),
+            },
+            None => log::warn!(
+                "english.wordlist not found beside {:?}; English mixed-input unavailable",
                 data_dir
-            );
+            ),
         }
+    }
 
-        // Load addon dictionaries if available
+    fn load_addon_lexicons(&mut self, data_dir: &std::path::Path) {
         let addon_dir = data_dir.join("addon");
-        if addon_dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(&addon_dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        let fst_path = path.join("lexicon.fst");
-                        let dat_path = path.join("lexicon.dat");
-                        if fst_path.exists() && dat_path.exists() {
-                            if let Ok(lexicon) = Lexicon::load(&fst_path, &dat_path) {
-                                let name = path
-                                    .file_name()
-                                    .and_then(|s| s.to_str())
-                                    .unwrap_or("unknown")
-                                    .to_string();
-                                log::info!("Loaded addon dictionary: {}", name);
-                                engine.add_addon(name, lexicon, false);
-                            }
-                        }
-                    }
-                }
+        let Ok(entries) = std::fs::read_dir(&addon_dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let fst = path.join("lexicon.fst");
+            let dat = path.join("lexicon.dat");
+            if !(fst.exists() && dat.exists()) {
+                continue;
+            }
+            if let Ok(lexicon) = Lexicon::load(&fst, &dat) {
+                let name = path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                log::info!("Loaded addon dictionary: {}", name);
+                self.add_addon(name, lexicon, false);
             }
         }
-
-        Ok(engine)
     }
 }

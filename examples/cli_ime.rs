@@ -9,43 +9,20 @@
 //!
 //! Run with: cargo run --example cli_ime
 
-use libpinyin::{Editor, Engine, KeyEvent, KeyResult};
+use libpinyin::{DataVariant, Editor, Engine, KeyEvent, KeyResult};
 use std::io::{self, Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== libpinyin CLI IME Demo (Phase 2: Editor Architecture) ===");
-    println!();
-    println!("✨ Features:");
-    println!("  • Pluggable editor architecture");
-    println!("  • Mode switching: Phonetic (拼音) ↔ Punctuation (标点)");
-    println!("  • Auxiliary text with helpful hints");
-    println!();
-    println!("📝 Commands:");
-    println!("  [Phonetic Mode]");
-    println!("    - Type a-z: input pinyin");
-    println!("    - Space: select first candidate");
-    println!("    - 1-9: select candidate by number");
-    println!("    - Enter: commit selection or raw input");
-    println!("    - ,: switch to punctuation mode");
-    println!("  [Punctuation Mode]");
-    println!("    - 1-9/Space: select punctuation variant");
-    println!("    - Esc: cancel and use original");
-    println!("  [General]");
-    println!("    - Backspace: delete previous character");
-    println!("    - Esc: cancel input");
-    println!("    - 'quit' or Ctrl+C: exit");
+    println!("=== libpinyin CLI IME Demo ===");
+    println!("Type a-z for pinyin; Space/1-9 select; Esc cancel; quit to exit.");
     println!();
 
-    // Load the IME engine
-    println!("Loading engine from data directory...");
-    let data_dir = std::env::current_dir()?.join("data/converted/simplified");
-    let backend = Engine::from_data_dir(&data_dir)?;
+    let backend = Engine::from_default_paths(DataVariant::Simplified).or_else(|_| {
+        let dir = std::env::current_dir()?.join("data/converted/simplified");
+        Engine::from_data_dir(dir)
+    })?;
     let mut ime = Editor::with_page_size(backend, 9);
-
-    println!("✓ Engine loaded successfully!");
-    println!();
-    println!("Try typing 'nihao,' to see phonetic → punctuation mode switching!");
-    println!();
+    println!("Engine ready.\n");
 
     // Main input loop
     loop {

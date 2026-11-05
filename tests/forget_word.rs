@@ -80,14 +80,14 @@ fn forget_mask_persists_across_userdict_reopen() {
     ));
     let _ = std::fs::remove_file(&ud);
     {
-        let mut udict = libpinyin::UserDict::new(&ud).expect("open");
+        let mut udict = libpinyin::userdict::UserDict::new(&ud).expect("open");
         udict.learn("背景");
         assert!(udict.frequency("背景") > 0);
         udict.forget_phrase("背景").expect("forget");
         assert!(udict.is_masked("背景"));
         assert_eq!(udict.frequency("背景"), 0);
     }
-    let reopened = libpinyin::UserDict::new(&ud).expect("reopen");
+    let reopened = libpinyin::userdict::UserDict::new(&ud).expect("reopen");
     assert!(reopened.is_masked("背景"));
     assert_eq!(reopened.frequency("背景"), 0);
 }

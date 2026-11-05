@@ -1,37 +1,39 @@
 //! Pinyin Chinese input method engine.
 //!
-//! High-level entry points:
+//! # Entry points
+//!
 //! - [`Engine`] — load lexicon data and query candidates (`input`)
 //! - [`Editor`] — key-event session (preedit, candidates, commit)
-//! - [`Parser`] / [`DoublePinyinScheme`] — segmentation and 双拼
+//! - [`Context`] — host-facing snapshot after each [`Editor::process_key`]
+//! - [`path`] — data-dir / userdict discovery ([`Engine::from_default_paths`])
+//!
+//! Configure the editor with [`EditorOptions`] (conversion knobs in [`HostKnobs`]).
+//! Use [`LanguageMode`] (中/英) and [`CharacterForm`] (半/全) instead of ad-hoc bools.
+//!
+//! Advanced APIs live in submodules: [`parser`], [`config`], [`double_pinyin`],
+//! [`lexicon`], [`emoji`], [`english`], …
 
 mod context;
-mod emoji;
-mod english;
 mod fuzzy;
-mod lexicon;
-mod model;
 mod session;
 mod trie;
-mod userdict;
-mod word_bigram;
 
 pub mod config;
 pub mod double_pinyin;
 pub mod editor;
+pub mod emoji;
 pub mod engine;
+pub mod english;
+pub mod lexicon;
+pub mod model;
 pub mod parser;
+pub mod path;
+pub mod userdict;
+pub mod word_bigram;
 
-pub use config::PinyinConfig;
-pub use context::{ImeContext, InputPurpose};
-pub use double_pinyin::DoublePinyinScheme;
-pub use editor::{preferred_chinese_punct, Editor, EditorOptions, KeyEvent, KeyResult};
-pub use emoji::{EmojiDict, EmojiEntry};
+pub use context::{Context, InputPurpose};
+pub use editor::{Editor, EditorOptions, HostKnobs, KeyEvent, KeyResult, LanguageMode};
 pub use engine::Engine;
-pub use english::EnglishDict;
-pub use lexicon::Lexicon;
-pub use model::{utils, CandidateRankMode, Config, Model};
-pub use parser::{Parser, Syllable};
+pub use model::{CandidateRankMode, CharacterForm, Config};
+pub use path::DataVariant;
 pub use session::{Candidate, InputMode};
-pub use userdict::UserDict;
-pub use word_bigram::WordBigram;

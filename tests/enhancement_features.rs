@@ -277,7 +277,7 @@ fn parser_apply_corrections_iou_iu() {
 fn incomplete_zh_sh_segment_as_units() {
     use common::c_options::{self, PINYIN_INCOMPLETE, PINYIN_OPTIONS_STRICT};
     use libpinyin::engine::PINYIN_SYLLABLES;
-    use libpinyin::Parser;
+    use libpinyin::parser::Parser;
     let cfg = c_options::from_c_options(PINYIN_OPTIONS_STRICT | PINYIN_INCOMPLETE);
     let p = Parser::with_syllables_and_config(PINYIN_SYLLABLES, &cfg);
     assert!(p.find_syllable_completion("zh").is_some());

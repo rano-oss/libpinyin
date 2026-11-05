@@ -3,7 +3,7 @@
 //! Tests the complete workflow from double pinyin input to segmentation.
 
 use libpinyin::double_pinyin::{double_to_full_pinyin, get_scheme_data, DoublePinyinScheme};
-use libpinyin::Parser;
+use libpinyin::parser::Parser;
 
 #[test]
 fn test_microsoft_scheme_basic_conversion() {

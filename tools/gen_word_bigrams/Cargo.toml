@@ -1,0 +1,9 @@
+[package]
+name = "gen_word_bigrams"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+tools-common = { path = "../tools-common" }

@@ -419,8 +419,8 @@ impl PhoneticEditor {
         // Update composition with syllable-separated preedit (e.g., "wo'de"),
         // or raw typed keys when double-pinyin + show_raw is enabled.
         let input_cursor = session.input_buffer.cursor();
-        let show_raw =
-            engine.double_pinyin_scheme.is_some() && engine.model.config.show_raw_double_pinyin;
+        let show_raw = engine.model.config.double_pinyin_scheme.is_some()
+            && engine.model.config.show_raw_double_pinyin;
         let composition = &mut session.composition;
         if show_raw {
             composition.set_text(input.clone());
@@ -863,6 +863,17 @@ impl PunctuationEditor {
     pub fn reset(&mut self) {
         self.active_key = None;
     }
+}
+
+/// Convert ASCII characters to full-width equivalents.
+pub fn to_fullwidth(s: &str) -> String {
+    s.chars()
+        .map(|ch| match ch {
+            ' ' => '\u{3000}',
+            '!'..='~' => char::from_u32(ch as u32 - 0x21 + 0xFF01).unwrap_or(ch),
+            _ => ch,
+        })
+        .collect()
 }
 
 /// Preferred Chinese punctuation for an ASCII key (Mac/Windows 中-mode default).
